@@ -1,4 +1,5 @@
-source 'https://rubygems.org'
+source 'http://ruby.taobao.org/'
+gem 'rails', '3.2.12'
 
 gem "compass-normalize", ">= 1.3"
 gem "animation", "~> 0.1.alpha.0"
