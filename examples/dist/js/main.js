@@ -1941,7 +1941,7 @@ define("../cardkit/parser/form", [
     function get_hd(source, custom){
         source = $(source);
         var data = source && {
-            html: util.getText(source),
+            html: util.getInnerHTML(source),
             href: util.getHref(source)
         } || {};
         if (custom && typeof custom === 'object') {
@@ -1968,7 +1968,7 @@ define("../cardkit/parser/mini", [
   "../cardkit/parser/util"
 ], function($, _, util){
     
-    var getText = util.getText;
+    var getInnerHTML = util.getInnerHTML;
 
     function exports(unit, raw){
         unit = $(unit);
@@ -2000,12 +2000,12 @@ define("../cardkit/parser/mini", [
         var title = item.find('.ckd-title'),
             author = item.find('.ckd-author');
         var data = {
-            title: getText(title),
+            title: getInnerHTML(title),
             href: util.getHref(title),
-            author: getText(author),
+            author: getInnerHTML(author),
             author_url: util.getHref(author),
-            info: getText(item.find('.ckd-info')),
-            subtitle: getText(item.find('.ckd-subtitle')),
+            info: getInnerHTML(item.find('.ckd-info')),
+            subtitle: getInnerHTML(item.find('.ckd-subtitle')),
             meta: item.find('.ckd-meta').map(function(node){
                 return node.innerHTML;
             }),
@@ -2026,7 +2026,7 @@ define("../cardkit/parser/mini", [
     function get_hd(source, custom){
         source = $(source);
         var data = source && {
-            html: getText(source),
+            html: getInnerHTML(source),
             href: util.getHref(source)
         } || {};
         if (custom && typeof custom === 'object') {
@@ -2053,7 +2053,7 @@ define("../cardkit/parser/list", [
   "../cardkit/parser/util"
 ], function($, _, util){
     
-    var getText = util.getText;
+    var getInnerHTML = util.getInnerHTML;
 
     function exports(unit, raw){
         unit = $(unit);
@@ -2089,11 +2089,11 @@ define("../cardkit/parser/list", [
             title = item;
         }
         var data = {
-            title: getText(title),
+            title: getInnerHTML(title),
             href: util.getHref(title),
-            author: getText(author),
+            author: getInnerHTML(author),
             author_url: util.getHref(author),
-            info: getText(item.find('.ckd-info')),
+            info: getInnerHTML(item.find('.ckd-info')),
             subtitle: util.getInnerHTML(item.find('.ckd-subtitle')),
             meta: item.find('.ckd-meta').map(function(node){
                 return node.innerHTML;
@@ -2115,7 +2115,7 @@ define("../cardkit/parser/list", [
     function get_hd(source, custom){
         source = $(source);
         var data = source && {
-            html: getText(source),
+            html: getInnerHTML(source),
             href: util.getHref(source)
         } || {};
         if (custom && typeof custom === 'object') {
@@ -2183,7 +2183,7 @@ define("../cardkit/parser/box", [
     function get_hd(source, custom_source){
         source = $(source);
         var data = source && {
-            html: util.getText(source),
+            html: util.getInnerHTML(source),
             href: util.getHref(source)
         } || {};
         if (custom_source && typeof custom_source === 'object') {
@@ -2206,7 +2206,7 @@ define("../cardkit/parser/box", [
 
 define("../cardkit/tpl/unit/form", [], function(){
 
-    return {"template":"\n<article>\n\n    {% if (data.hd) { %}\n    <header>\n        {% if (data.hd_url) { %}\n        <a href=\"{%= data.hd_url %}\" class=\"ck-link\">{%= data.hd %}</a>\n        {% } else { %}\n        <span>{%= data.hd %}</span>\n        {% } %}\n    </header>\n    {% } %}\n\n    <fieldset>\n    {% data.items.forEach(function(item){ %}\n        <div class=\"ck-item\">\n            {%= item.content %}\n        </div>\n    {% }); %}\n    </fieldset>\n\n    {% if (data.ft) { %}\n    <footer>{%= data.ft %}</footer>\n    {% } %}\n\n</article>\n\n"}; 
+    return {"template":"\n<article>\n\n    {% if (data.hd) { %}\n    <header>\n        {% if (data.hd_url) { %}\n        <a href=\"{%= data.hd_url %}\" class=\"ck-link\">{%= data.hd %}</a>\n        {% } else { %}\n        <span>{%= data.hd %}</span>\n        {% } %}\n    </header>\n    {% } %}\n\n    <section>\n    {% data.items.forEach(function(item){ %}\n        <div class=\"ck-item\">\n            {%= item.content %}\n        </div>\n    {% }); %}\n    </section>\n\n    {% if (data.ft) { %}\n    <footer>{%= data.ft %}</footer>\n    {% } %}\n\n</article>\n\n"}; 
 
 });
 /* @source ../cardkit/tpl/unit/mini.js */;
@@ -2958,7 +2958,9 @@ define('moui/overlay', [
         },
 
         set: function(opt) {
-            opt = opt || {};
+            if (!opt) {
+                return this;
+            }
             _.config(this._config, opt, this._defaults);
 
             if (typeof opt.title === 'string') {
@@ -3136,7 +3138,6 @@ define("../cardkit/view/growl", [
         var id;
         if (elm.nodeName) {
             elm = $(elm);
-            opt = opt || {};
             id = elm[0][UID];
             if (id && lib[id]) {
                 lib[id].close();
@@ -3203,7 +3204,9 @@ define('moui/control', [
         },
 
         set: function(opt){
-            opt = opt || {};
+            if (!opt) {
+                return this;
+            }
             _.mix(this._config, opt);
             this.setNodes(opt);
             return this;
@@ -3357,7 +3360,9 @@ define('moui/picker', [
         },
 
         set: function(opt){
-            opt = opt || {};
+            if (!opt) {
+                return this;
+            }
             _.mix(this._config, opt);
 
             if (opt.multiselect !== undefined) {
@@ -3648,6 +3653,9 @@ define('moui/actionview', [
         },
 
         set: function(opt) {
+            if (!opt) {
+                return this;
+            }
             this.superClass.set.call(this, opt);
 
             if (opt.options) {
@@ -3758,13 +3766,13 @@ define("../cardkit/view/actionview", [
 
     function exports(elm, opt){
         elm = $(elm);
-        opt = opt || {};
-        opt.className = 'ck-actionview';
         var id = elm[0][UID];
         if (id && lib[id]) {
             return lib[id].set(opt);
         }
         id = elm[0][UID] = ++uid;
+        opt = opt || {};
+        opt.className = 'ck-actionview';
         var view = lib[id] = actionView(opt);
         var eprops = {
             component: view
@@ -3840,6 +3848,9 @@ define('moui/modalview', [
         },
 
         set: function(opt) {
+            if (!opt) {
+                return this;
+            }
             var self = this;
             self.superClass.set.call(self, opt);
 
@@ -4287,6 +4298,9 @@ define("../cardkit/view/modalcard", [
         origin_set = modalCard.set;
 
     modalCard.set = function(opt){
+        if (!opt) {
+            return this;
+        }
         var self = this,
             url = opt.jsonUrl || opt.url;
         if (url) {
@@ -4502,12 +4516,14 @@ define("../cardkit/view/picker", [
 
     function exports(elm, opt){
         elm = $(elm);
-        opt = opt || {};
         var id = elm[0][UID];
         if (id && lib[id]) {
             return lib[id].set(opt);
         }
         id = elm[0][UID] = ++uid;
+        opt = _.mix({
+            options: '.ck-option'
+        }, opt || {});
         var p = lib[id] = picker(elm, opt);
 
         p.event.bind('change', function(p, controller){
@@ -4620,7 +4636,6 @@ define("../cardkit/view/control", [
 
     function exports(elm, opt){
         elm = $(elm);
-        opt = opt || {};
         var id = elm[0][UID];
         if (id && lib[id]) {
             return lib[id].set(opt);
@@ -4663,7 +4678,14 @@ define('momo/base', [
 ], function(es5, type, _){
 
     var isFunction = type.isFunction,
-        gid = 0;
+        gid = 0,
+
+        SUPPORT_TOUCH = false;
+
+    try {
+        document.createEvent("TouchEvent");  
+        SUPPORT_TOUCH = true;
+    } catch (e) {}
 
     function MomoBase(elm, opt, cb){
         if (!opt || isFunction(opt)) {
@@ -4686,9 +4708,11 @@ define('momo/base', [
 
     MomoBase.prototype = {
 
-        PRESS: 'touchstart',
-        MOVE: 'touchmove',
-        RELEASE: 'touchend',
+        SUPPORT_TOUCH: SUPPORT_TOUCH,
+
+        PRESS: SUPPORT_TOUCH ? 'touchstart' : 'mousedown',
+        MOVE: SUPPORT_TOUCH ? 'touchmove' : 'mousemove',
+        RELEASE: SUPPORT_TOUCH ? 'touchend' : 'mouseup',
         //CANCEL: 'touchcancel',
 
         EVENTS: [],
@@ -4814,8 +4838,8 @@ define('momo/scroll', [
         },
 
         press: function(e){
-            var self = this;
-            var t = e.touches[0];
+            var self = this,
+                t = this.SUPPORT_TOUCH ? e.touches[0] : e;
             self._scrollDown = null;
             self._lastY = t.clientY;
             self._scrollY = null;
@@ -4838,7 +4862,7 @@ define('momo/scroll', [
         },
 
         move: function(e){
-            var t = e.touches[0];
+            var t = this.SUPPORT_TOUCH ? e.touches[0] : e;
             this.checkScollDirection(t.clientY);
             //this._lastY = t.clientY;
             if (this.scrollingNode) {
@@ -4848,7 +4872,7 @@ define('momo/scroll', [
 
         release: function(e){
             var self = this, 
-                t = e.changedTouches[0],
+                t = this.SUPPORT_TOUCH ? e.changedTouches[0] : e,
                 node = { target: self.node };
             // up/down
             this.checkScollDirection(t.clientY);
@@ -5021,7 +5045,7 @@ define('momo/tap', [
         },
 
         press: function(e){
-            var t = e.touches[0];
+            var t = this.SUPPORT_TOUCH ? e.touches[0] : e;
             this._startTime = e.timeStamp;
             this._startTarget = t.target;
             this._startPosX = t.clientX;
@@ -5030,7 +5054,7 @@ define('momo/tap', [
         },
 
         move: function(e){
-            var t = e.touches[0];
+            var t = this.SUPPORT_TOUCH ? e.touches[0] : e;
             this._moveTarget = t.target;
             this._movePosX = t.clientX;
             this._movePosY = t.clientY;
@@ -5094,7 +5118,7 @@ define("choreo", [
 ], function(es5, _, mainloop, Event){
 
     var window = this,
-        VENDORS = ['', 'Moz', 'webkit', 'ms', 'O'],
+        VENDORS = ['Moz', 'webkit', 'ms', 'O', ''],
         EVENT_NAMES = {
             '': 'transitionend',
             'Moz': 'transitionend',
@@ -6230,19 +6254,19 @@ define("../cardkit/app", [
             toggle_control.call(this);
         },
 
-        '.ck-segment .option': function(){
+        '.ck-segment .ck-option': function(){
             var p = picker(this.parentNode, {
                 ignoreRepeat: true
             });
             p.select(this);
         },
 
-        '.ck-tagselector .option': function(){
+        '.ck-tagselector .ck-option': function(){
             var p = picker(this.parentNode);
             p.select(this);
         },
 
-        '.ck-actions .option': function(){
+        '.ck-actions .ck-option': function(){
             var actions = $(this).closest('.ck-actions');
             var p = picker(actions, {
                 ignoreStatus: actions.data("ignoreStatus") !== 'false' && true
@@ -6264,7 +6288,7 @@ define("../cardkit/app", [
                 cancelText: '取消',
                 multiselect: false
             }, me.data());
-            opt.options = $(opt.options || '.option', me);
+            opt.options = $(opt.options || '.ck-option', me);
             actionView(me, opt).open();
         },
 
@@ -6275,7 +6299,7 @@ define("../cardkit/app", [
             growl(this).open();
         },
 
-        '.ck-actionview .content > article .option': function(){
+        '.ck-actionview article > .ck-option': function(){
             actionView.current.select(this);
         },
 
@@ -6739,7 +6763,10 @@ define("../cardkit/app", [
             if ($(me).hasClass('ck-link')) {
                 next_id = (me.href.replace(location.href, '')
                     .match(/^#(.+)/) || [])[1];
-            } else if ($(me).attr('target')) {
+            } else if (/^ck-\w+/.test(me.className)) {
+                return;
+            } else if (me.target) {
+                open_url(me.href, me);
                 return;
             }
         }
@@ -6834,14 +6861,14 @@ define("../cardkit/app", [
         //}
     //}
 
-    function open_url(true_link){
-        pageSession.reset();
-        //var next_id = 'ckLoading';
-        //var next = ck.loadingCard;
-        //var current = ck.viewport;
-        //push_history(current[0].id, next_id, true_link);
-        //ck.changeView(next);
-        location.replace(true_link);
+    function open_url(true_link, opt){
+        opt = opt || {};
+        if (opt.target) {
+            window.open(true_link, opt.target);
+        } else {
+            pageSession.reset();
+            location.replace(true_link);
+        }
     }
 
     function check_gc(controller){
