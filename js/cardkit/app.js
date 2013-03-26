@@ -15,13 +15,14 @@ define([
     './view/modalcard',
     './view/actionview',
     './view/growl',
+    './view/slidelist',
     './bus',
     './pagesession',
     './render',
     'mo/domready'
 ], function($, _, tpl, soviet, choreo, 
     momoBase, momoTap, momoSwipe, momoDrag, momoScroll, 
-    control, picker, stars, modalCard, actionView, growl,
+    control, picker, stars, modalCard, actionView, growl, slidelist,
     bus, pageSession, render){
 
     var window = this,
@@ -31,7 +32,6 @@ define([
         back_timeout,
         gc_id = 0,
 
-        //SUPPORT_ORIENT = "orientation" in window && "onorientationchange" in window,
         SUPPORT_OVERFLOWSCROLL = "webkitOverflowScrolling" in body.style,
 
         TPL_MASK = '<div class="ck-globalmask"></div>';
@@ -246,9 +246,9 @@ define([
             this.defaultCard = $('#ckDefault');
             this.globalMask = $(TPL_MASK).appendTo(body);
             this.headerHeight = this.header.height();
-            this.windowFullHeight = Infinity;
             this.inited = false;
             this.viewportGarbage = {};
+            this.initWindow();
 
             this.scrollGesture = momoScroll(document);
             momoTap(document);
@@ -263,9 +263,13 @@ define([
                 ck.hideLoading();
             }, 0);
 
-            //$(window).bind('resize', function(e){
-                //ck.updateSize();
-            //});
+            $(window).bind('resize', function(){
+                var current = ck.isLandscape();
+                if (current !== ck.landscapeMode) {
+                    ck.initWindow();
+                    ck.hideAddressbar(); // @TODO 无效
+                }
+            });
 
             soviet(document, {
                 matchesSelector: true,
@@ -355,6 +359,11 @@ define([
 
         },
 
+        initWindow: function(){
+            this.landscapeMode = this.isLandscape();
+            this.windowFullHeight = Infinity;
+        },
+
         initState: function(){
 
             $(window).bind("popstate", function(e){
@@ -433,6 +442,16 @@ define([
                 if (!opt.isModal) {
                     card.data('rendered', '1');
                 }
+                card.find('.ck-mini-unit').forEach(function(unit){
+                    var slide = $('.ck-inslide', unit);
+                    if (slide[0]) {
+                        var pagers = $('.ck-page span', unit);
+                        slidelist(slide).event.bind('change', function(n){
+                            pagers.removeClass('enable');
+                            pagers.eq(n).addClass('enable');
+                        });
+                    }
+                });
             }
             this.watchScroll(card);
         },
@@ -530,16 +549,9 @@ define([
             }
         },
 
-        //getOrientation : function() {
-            //var is_portrait = true;
-            //if (SUPPORT_ORIENT) {
-                //is_portrait = ({ "0": true, "180": true })[window.orientation];
-            //} else {
-                //is_portrait = body.clientWidth / body.clientHeight < 1.1;
-            //}
-
-            //return is_portrait ? "portrait" : "landscape";
-        //},
+        isLandscape: function() {
+            return body.clientWidth / body.clientHeight > 1.1;
+        },
 
         openModal: function(opt){
             this.hideAddressbar();
