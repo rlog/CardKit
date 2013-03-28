@@ -7,22 +7,26 @@ define([
     './tpl/unit/list',
     './tpl/unit/mini',
     './tpl/unit/form',
+    './tpl/unit/blank',
     './parser/box',
     './parser/list',
     './parser/mini',
     './parser/form'
 ], function($, _, tpl, 
-    tpl_box, tpl_list, tpl_mini, tpl_form,
+    tpl_box, tpl_list, tpl_mini, tpl_form, tpl_blank,
     boxParser, listParser, miniParser, formParser){
 
     var TPL_TIPS = '<div class="ck-top-tips">长按顶部导航条，可拖出浏览器地址栏</div>';
 
     function exports(card, raw, footer, opt) {
 
+        var has_content = false;
+
         card.find('.ck-box-unit').forEach(function(unit){
             var data = boxParser(unit, raw);
-            if (data.content) {
+            if (data.hasContent || data.hd) {
                 unit.innerHTML = tpl.convertTpl(tpl_box.template, data, 'data');
+                has_content = true;
             } else {
                 $(unit).remove();
             }
@@ -48,8 +52,9 @@ define([
             if (data.config.limit) {
                 data.items.length = data.config.limit;
             }
-            if (data.items.length) {
+            if (data.hd || data.items.length) {
                 unit.innerHTML = tpl.convertTpl(tpl_list.template, data, 'data');
+                has_content = true;
             } else {
                 $(unit).remove();
             }
@@ -69,8 +74,9 @@ define([
             if (data.config.limit) {
                 data.items.length = data.config.limit;
             }
-            if (data.items.length) {
+            if (data.hd || data.items.length) {
                 unit.innerHTML = tpl.convertTpl(tpl_mini.template, data, 'data');
+                has_content = true;
             } else {
                 $(unit).remove();
             }
@@ -78,12 +84,17 @@ define([
 
         card.find('.ck-form-unit').forEach(function(unit){
             var data = formParser(unit, raw);
-            if (data.items.length) {
+            if (data.hd || data.items.length) {
                 unit.innerHTML = tpl.convertTpl(tpl_form.template, data, 'data');
+                has_content = true;
             } else {
                 $(unit).remove();
             }
         });
+
+        if (!has_content && !opt.isModal) {
+            card.append(tpl_blank.template);
+        }
 
         if (!opt.isModal) {
             card.append(footer.clone())
