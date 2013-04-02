@@ -4962,16 +4962,20 @@ define('moui/actionview', [
 
         confirm: function(){
             this.event.fire('confirm', [this, this._picker]);
-            return this.done();
+            return this.ok();
         },
 
         cancel: function(){
             this.event.fire('cancel', [this, this.picker]);
-            return this.done();
+            return this.ok();
         },
 
-        done: function(){
-            return this.close();
+        ok: function(){
+            var self = this;
+            setTimeout(function(){
+                self.close();
+            }, 0);
+            return this.event.promise('close');
         },
 
         open: function(){
@@ -4998,6 +5002,8 @@ define('moui/actionview', [
         }
 
     });
+
+    ActionView.prototype.done = ActionView.prototype.ok;
 
     ['select', 'unselect', 'undo',
         'selectAll', 'unselectAll', 'selectInvert'].forEach(function(method){
@@ -5199,12 +5205,16 @@ define('moui/modalview', [
 
         cancel: function(){
             this.event.fire('cancel', [this]);
-            this.done();
+            this.ok();
             return this;
         },
 
-        done: function(){
-            return this.close();
+        ok: function(){
+            var self = this;
+            setTimeout(function(){
+                self.close();
+            }, 0);
+            return this.event.promise('close');
         },
 
         open: function(){
@@ -5228,6 +5238,8 @@ define('moui/modalview', [
         }
 
     });
+
+    ModalView.prototype.done = ModalView.prototype.ok;
 
     function exports(opt) {
         return new exports.ModalView(opt);
@@ -5554,6 +5566,18 @@ define("mo/network", [
         img.src = !params ? url : [url, /\?/.test(url) ? "&" : "?", typeof params == "string" ? params : exports.httpParam(params)].join('');
     };
 
+    exports.parseJSON = function(json){
+        json = json
+            .replace(/^[\w(<\/*!\s]*?\{/, '{')
+            .replace(/[^\}]*$/, '');
+        try {
+            json = window.JSON ? window.JSON.parse(json) : eval(json);
+        } catch(ex) {
+            json = false;
+        }
+        return json;
+    };
+
 });
 
 /* @source ../cardkit/view/modalcard.js */;
@@ -5608,14 +5632,20 @@ define("../cardkit/view/modalcard", [
         return origin_set.call(this, opt);
     };
     
-    modalCard.done = function(){
+    modalCard.ok = modalCard.done = function(){
         if (!history.state) {
             history.go(-2);
         } else {
             history.back();
         }
-        return this;
+        return this.event.promise('close');
     };
+
+    modalCard.event.bind('confirm', function(modal){
+        modal.event.fire('confirmOnThis', arguments);
+    }).bind('close', function(modal){
+        modal.event.unbind('confirmOnThis');
+    });
 
     return modalCard;
 
