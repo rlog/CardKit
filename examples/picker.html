@@ -217,16 +217,18 @@
 <script>
 require([
     'dollar',
-    'cardkit/app'
+    'cardkit/app',
+    'cardkit/pageready'
 ], function($, ck){
 
     var notify = ck.growl({
         corner: 'bottom'
     });
 
+    $('.picker1').bind('picker:change', show_result);
+
     ck.delegate.on('picker:change', {
 
-        '.picker1': show_result,
         '.picker2': show_result,
         '.picker3': show_result,
 
@@ -276,7 +278,7 @@ require([
 
 SyntaxHighlighter.defaults['toolbar'] = false;
 SyntaxHighlighter.all();
-define('env', [], function(){
+define('cardkit/env', [], function(){
     return {
         enableConsole: true
     };

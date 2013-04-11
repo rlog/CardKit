@@ -10,14 +10,21 @@ require.config({
 define('mo/lang/es5', [], function(){});
 define('mo/mainloop', [], function(){});
 
-define('env', [], function(){
+define('cardkit/env', [], function(){
     return {};
+});
+
+define('cardkit/pageready', [
+    'finish', 
+    'cardkit/bus'
+], function(finish, bus){
+    bus.once('readycardchange', finish);
 });
 
 require([
     'dollar', 
     'cardkit/app',
-    'env'
+    'cardkit/env'
 ], function($, app, env){
 
     if (env.enableConsole) {
