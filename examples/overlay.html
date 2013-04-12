@@ -14,8 +14,9 @@
 <link href="css/common.css" rel="stylesheet">
 <style>
 </style>
+<script>function ckControl(){return false}</script>
 </head>
-<body>
+<body ontouchstart="return ckControl()">
 
 <div class="ck-root">
     
@@ -410,7 +411,6 @@ require([
     $('.my-actions-button').bind('actionView:confirm', when_confirm);
 
     $('.my-actions-button').bind('tap', function(){
-        console.info(this)
         ck.actionView(this, {
             title: 'This is title',
             content: 'This is content',
@@ -453,7 +453,6 @@ require([
     });
 
     function when_confirm(e){
-        console.info(e)
         var result = e.component.val();
         console.info('value: ', result);
         notify.set({
