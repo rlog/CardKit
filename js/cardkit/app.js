@@ -33,9 +33,12 @@ define([
         document = window.document,
         body = document.body,
         //back_timeout,
+        last_view_for_modal,
+        last_view_for_actions,
         gc_id = 0,
 
-        TPL_MASK = '<div class="ck-viewmask"></div>';
+        TPL_MASK = '<div class="ck-viewmask"></div>',
+        TPL_CARD_MASK = '<div class="ck-cardmask"></div>';
 
     _.mix(momoBase.Class.prototype, {
         bind: function(ev, handler, elm){
@@ -57,14 +60,14 @@ define([
         'a': link_handler,
         'a *': link_handler,
 
-        '.ck-card .ck-post-link': enable_control,
+        '.ck-card .ck-post-link': handle_control,
 
-        '.ck-card .ck-post-button': enable_control,
+        '.ck-card .ck-post-button': handle_control,
         '.ck-card .ck-post-button span': function tap_ck_post(){
             if (!$(this).hasClass('ck-post-button')) {
                 return tap_ck_post.call(this.parentNode);
             }
-            enable_control.call(this);
+            handle_control.call(this);
         },
 
         '.ck-card .ck-switch span': function tap_ck_switch(){
@@ -157,7 +160,7 @@ define([
         ck.openModal($(this).data());
     }
 
-    function enable_control(){
+    function handle_control(){
         var controller = control(this);
         if (!controller.isEnabled) {
             controller.enable();
@@ -190,8 +193,8 @@ define([
         ck.disableView = false;
         $(body).removeClass('bg').removeClass('modal-view');
     }).bind('open', function(){
-        var prev = ck.viewport,
-            current = modalCard._contentWrapper;
+        var current = modalCard._contentWrapper;
+        last_view_for_modal = ck.viewport;
         ck.changeView(current, { 
             isModal: true 
         });
@@ -221,9 +224,6 @@ define([
             ck.enableControl();
         }
         modalCard._content.css('minHeight', h + 'px');
-        modalCard.event.once('close', function(){
-            ck.changeView(prev);
-        });
     }).bind('prepareClose', function(){
         ck.disableView = false;
         $(body).removeClass('modal-view');
@@ -231,6 +231,7 @@ define([
         ck.disableView = true;
         $(body).addClass('modal-view');
     }).bind('close', function(){
+        ck.changeView(last_view_for_modal);
         $(body).removeClass('bg');
     }).bind('needclose', function(){
         ck.closeModal();
@@ -239,6 +240,7 @@ define([
     bus.bind('actionView:prepareOpen', function(actionCard){
         ck.disableView = true;
         var current = actionCard._wrapper;
+        last_view_for_actions = ck.viewport;
         ck.changeView(current, { 
             isModal: true 
         });
@@ -250,11 +252,22 @@ define([
             height: h + 'px'
         });
     }).bind('actionView:cancelOpen', function(){
-        ck.disableView = false;
-        ck.changeView(ck.lastView);
+        if (!modalCard.isOpened) {
+            ck.disableView = false;
+        }
+        ck.changeView(last_view_for_actions, {
+            preventRender: modalCard.isOpened,
+            isModal: modalCard.isOpened
+        });
     }).bind('actionView:close', function(){
-        ck.disableView = false;
-        ck.changeView(ck.lastView);
+        if (!modalCard.isOpened) {
+            ck.disableView = false;
+        }
+        console.info("log: ", 1, last_view_for_actions); // log
+        ck.changeView(last_view_for_actions, {
+            preventRender: modalCard.isOpened,
+            isModal: modalCard.isOpened
+        });
     }).bind('actionView:jump', function(actionCard, href, target){
         actionCard.event.once('close', function(){
             ck.openURL(href, { target: target });
@@ -285,11 +298,16 @@ define([
                     'background': '#0f0'
                 });
             }
+            this.cardMask = $(TPL_CARD_MASK).appendTo(body);
             this.headerHeight = this.header.height();
             this.sizeInited = false;
             this.viewportGarbage = {};
             this.sessionLocked = true;
             this.initWindow();
+
+            if (env.enableConsole) {
+                console.info(supports);
+            }
 
             this.scrollGesture = momoScroll(document);
             momoTap(document);
@@ -358,14 +376,19 @@ define([
             //}).bind('scrollup', function(){
                 //ck.showTopbar();
             }).bind('scrollstart', function(){
-                ck.scrollMask.show();
+                if (supports.OVERFLOWSCROLL) {
+                    ck.scrollMask.show();
+                }
             }).bind('scrollend', function(){
-                ck.scrollMask.hide();
+                if (supports.OVERFLOWSCROLL) {
+                    ck.scrollMask.hide();
+                }
                 prevent_window_scroll();
             }).bind('scroll', function(){
                 if (modalCard.isOpened) {
                     var y = window.scrollY;
                     ck.hideAddressbar();
+                    window.scrollTo(0, 0);
                     if (y > 40) {
                         ck.viewport[0].scrollTop = ck.viewport[0].scrollTop + y - 40;
                     }
@@ -421,7 +444,7 @@ define([
 
             ck.sessionLocked = false;
 
-            var travel_history, restore_state;
+            var travel_history, restore_state, restore_modal;
 
             if (supports.HISTORY) {
                 $(window).bind("popstate", function(e){
@@ -486,13 +509,11 @@ define([
 
                 travel_history = check_footprint();
 
-                var current_state = history.state,
-                    restore_state = current_state && current_state.next; // alert(['init', current_state && [current_state.prev, current_state.next].join('-'), ck.viewport && ck.viewport[0].id].join(', '))
-                if (restore_state === '_modal_') { // @TODO
+                var current_state = history.state;
+                restore_state = current_state && current_state.next; // alert(['init', current_state && [current_state.prev, current_state.next].join('-'), ck.viewport && ck.viewport[0].id].join(', '))
+                if (restore_state === '_modal_') {
                     restore_state = current_state.prev;
-                    if (!modalCard.isOpened && ck.viewport) {
-                        modalCard.set(history.state.opt).open();
-                    }
+                    restore_modal = true;
                 }
 
                 //console.info(travel_history, restore_state, current_state)
@@ -511,6 +532,8 @@ define([
                 if (restore_state === 'ckLoading') {
                     // 9.  alert(9)
                     history.back();
+                } else if (restore_modal && !modalCard.isOpened) {
+                    modalCard.set(history.state.opt).open();
                 }
             } else {
                 if (travel_history) {
@@ -536,7 +559,7 @@ define([
         },
 
         initView: function(card, opt){
-            if (!card.data('rendered')) {
+            if (!card.data('rendered') && !opt.preventRender) {
                 render.initCard(card, this.raw, this.footer, opt);
                 if (!opt.isModal) {
                     card.data('rendered', '1');
@@ -570,7 +593,6 @@ define([
             }
             var is_loading = card === this.loadingCard;
             this.initView(card, opt);
-            this.lastView = this.viewport;
             this.viewport = card.show();
             if (!is_loading) {
                 this.updateSize();
@@ -625,7 +647,7 @@ define([
             this._loadingAnimate.clear().play()
                 .actor(ck.loadingCard[0], {
                     opacity: 0
-                }, 400, 'easeInOut').follow().then(function(){
+                }, 400, 'ease').follow().then(function(){
                     ck.loadingCard.hide().css({
                         position: 'static',
                         opacity: '',
@@ -813,13 +835,19 @@ define([
         }
         ck.disableControl();
         //ck.showTopbar();
+        choreo.transform(next[0], 'translateX', window.innerWidth + 'px');
         next.addClass('moving');
         ck.changeView(next);
-        choreo().play().actor(ck.wrapper[0], {
-            'transform': 'translateX(' + (0 - window.innerWidth) + 'px)'
-        }, 400, 'easeInOut').follow().done(function(){
+        ck.cardMask.css('opacity', 0).addClass('moving');
+        var moving = choreo().play();
+        moving.actor(ck.cardMask[0], {
+            'opacity': '1'
+        }, 350, 'ease');
+        moving.actor(next[0], {
+            'transform': 'translateX(0)'
+        }, 400, 'ease').follow().done(function(){
             current.hide();
-            choreo.transform(ck.wrapper[0], 'translateX', '0');
+            ck.cardMask.removeClass('moving');
             next.removeClass('moving');
             ck.enableControl();
             ck.sessionLocked = false;
@@ -837,12 +865,15 @@ define([
     }
 
     function back_handler(prev_id){
+        if (actionView.current) {
+            actionView.current.close().event.once('close', function(){
+                back_handler(prev_id);
+            });
+            return;
+        }
         ck.sessionLocked = true;
         var prev = $('#' + prev_id);
         var current = ck.viewport;
-        if (actionView.current) {
-            actionView.current.close();
-        }
         //if (supports.PREVENT_CACHE && prev === ck.loadingCard) {
             //ck.sessionLocked = false;
             //history.back();
@@ -850,14 +881,20 @@ define([
         //}
         ck.disableControl();
         //ck.showTopbar();
-        choreo.transform(ck.wrapper[0], 'translateX', 0 - window.innerWidth + 'px');
+        choreo.transform(current[0], 'translateX', '0px');
         current.addClass('moving');
-        prev.show();
         ck.changeView(prev);
-        choreo().play().actor(ck.wrapper[0], {
-            'transform': 'translateX(0)'
-        }, 400, 'easeInOut').follow().done(function(){
+        ck.cardMask.css('opacity', '1').addClass('moving');
+        var moving = choreo().play();
+        moving.actor(ck.cardMask[0], {
+            'opacity': '0'
+        }, 350, 'ease');
+        moving.play().actor(current[0], {
+            'transform': 'translateX(' + window.innerWidth + 'px)'
+        }, 400, 'ease').follow().done(function(){
+            ck.cardMask.removeClass('moving');
             current.hide().removeClass('moving');
+            choreo.transform(current[0], 'translateX', '0px');
             ck.enableControl();
             ck.sessionLocked = false;
             if (prev_id === 'ckLoading') {
@@ -945,6 +982,9 @@ define([
     }
 
     function prevent_window_scroll(){
+        if (!supports.SAFARI_TOPBAR) {
+            return;
+        }
         var vp = ck.viewport[0],
             bottom;
         if (vp.scrollTop < 1) {
