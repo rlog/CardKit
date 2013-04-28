@@ -234,8 +234,8 @@ define([
 
     modalCard.event.bind('prepareOpen', function(){
         ck.disableView = true;
-        if (!supports.OVERFLOWSCROLL) {
-            window.scrollTo(0, 0);
+        if (!supports.CARD_SCROLL) {
+            window.scrollTo(0, -1);
         } else {
             $(body).addClass('bg').addClass('modal-view');
         }
@@ -243,7 +243,7 @@ define([
         ck.disableView = false;
         $(body).removeClass('bg').removeClass('modal-view');
     }).bind('open', function(){
-        if (!supports.OVERFLOWSCROLL) {
+        if (!supports.CARD_SCROLL) {
             $(body).addClass('bg').addClass('modal-view');
         }
         var current = modalCard._contentWrapper;
@@ -297,14 +297,14 @@ define([
             preventRender: true,
             isActions: true
         });
-        if (!supports.OVERFLOWSCROLL) {
+        if (!supports.CARD_SCROLL) {
             $(body).addClass('bg');
         }
     }).bind('actionView:cancelOpen', function(){
         if (!modalCard.isOpened) {
             ck.disableView = false;
         }
-        if (!supports.OVERFLOWSCROLL) {
+        if (!supports.CARD_SCROLL) {
             $(body).removeClass('bg');
         }
         ck.changeView(last_view_for_actions, {
@@ -315,7 +315,7 @@ define([
         if (!modalCard.isOpened) {
             ck.disableView = false;
         }
-        if (!supports.OVERFLOWSCROLL) {
+        if (!supports.CARD_SCROLL) {
             $(body).removeClass('bg');
         }
         ck.changeView(last_view_for_actions, {
@@ -367,10 +367,10 @@ define([
             this.scrollGesture = momoScroll(document);
             momoTap(document);
 
-            if (!supports.OVERFLOWSCROLL) {
+            if (!supports.CARD_SCROLL) {
                 $(body).addClass('no-overflowscroll');
             }
-            if (supports.SAFARI_TOPBAR) {
+            if (supports.HIDE_TOPBAR) {
                 $(body).addClass('mobilesafari-bar');
             }
             this.initState();
@@ -387,7 +387,7 @@ define([
                     ck.initWindow();
                     ck.hideAddressbar(); // @TODO 无效
                     if (actionView.current 
-                            && !supports.OVERFLOWSCROLL) {
+                            && !supports.UNIVERSAL_TRANS) {
                         ck.viewport[0].innerHTML = ck.viewport[0].innerHTML;
                     }
                 }
@@ -436,7 +436,7 @@ define([
                 //ck.showTopbar();
             });
             
-            if (supports.OVERFLOWSCROLL 
+            if (supports.CARD_SCROLL 
                     && supports.SAFARI_OVERFLOWSCROLL) {
 
                 doc.bind('scrollstart', function(){
@@ -446,23 +446,31 @@ define([
                     prevent_window_scroll();
                 });
 
+                doc.bind('touchstart', prevent_window_scroll);
+
+            }
+
+            if (supports.UNIVERSAL_TRANS) {
+
                 doc.bind('scroll', function(){
                     if (modalCard.isOpened) {
                         var y = window.scrollY;
-                        ck.hideAddressbar();
-                        window.scrollTo(0, 0);
+                        if (!y && window.innerHeight >= ck.windowFullHeight) {
+                            return;
+                        }
+                        //ck.hideAddressbar();
+                        window.scrollTo(0, -1);
+                        body.scrollTop = 0;
                         if (y > 40) {
                             ck.viewport[0].scrollTop = ck.viewport[0].scrollTop + y - 40;
                         }
                     }
                 });
 
-                doc.bind('touchstart', prevent_window_scroll);
-
             }
 
-            if (supports.SAFARI_TOPBAR 
-                    && supports.OVERFLOWSCROLL) {
+            if (supports.HIDE_TOPBAR
+                    && supports.CARD_SCROLL) {
 
                 var startY,
                     hold_timer,
@@ -511,11 +519,11 @@ define([
 
             var travel_history, restore_state, restore_modal;
 
-            if (supports.OVERFLOWSCROLL) {
+            if (supports.UNIVERSAL_TRANS) {
                 $(window).bind("popstate", function(e){
                     // alert(['pop', e.state && [e.state.prev, e.state.next].join('-'), ck.viewport && ck.viewport[0].id].join(', '))
                     if (ck.sessionLocked) {
-                        location.reload(true);
+                        window.location.reload(true);
                         return;
                     }
                     //clearTimeout(back_timeout);
@@ -586,7 +594,12 @@ define([
             } else if (supports.PREVENT_CACHE) {
 
                 $(window).bind("popstate", function(){
-                    window.location.reload(true);
+                    ck.hideTopbar();
+                    ck.viewport.hide();
+                    ck.changeView(ck.loadingCard);
+                    setTimeout(function(){
+                        window.location.reload();
+                    }, 100);
                 });
 
             }
@@ -675,7 +688,7 @@ define([
 
         updateSize: function(opt){
             opt = opt || {};
-            if (supports.OVERFLOWSCROLL || opt.isActions) {
+            if (supports.CARD_SCROLL || opt.isActions) {
                 this.viewport[0].style.height = (this.sizeInited ? 
                     window.innerHeight : (screen.availHeight + 60)) + 2 + 'px';
                 // enable scrollable when height is not enough 
@@ -729,23 +742,24 @@ define([
         hideTopbar: function(){
             if (this.topbarEnable && !this.disableView) {
                 this.topbarEnable = false;
-                choreo.transform(ck.header[0], 'translateY', '-' + this.headerHeight + 'px');
+                $(body).removeClass('ck-topbar-enabled');
             }
         },
 
         showTopbar: function(){
             if (!this.topbarEnable) {
                 this.topbarEnable = true;
-                choreo.transform(ck.header[0], 'translateY', '0');
+                $(body).addClass('ck-topbar-enabled');
             }
         },
 
         hideAddressbar: function(){
             if (this.windowFullHeight > window.innerHeight) {
                 this.loadingCard.find('div')[0].style.visibility = 'hidden';
-                if (supports.SAFARI_TOPBAR 
-                        && (supports.OVERFLOWSCROLL || !this.sizeInited)) {
-                    window.scrollTo(0, 1);
+                if (supports.HIDE_TOPBAR
+                        && (supports.CARD_SCROLL || !this.sizeInited)) {
+                    window.scrollTo(0, -1);
+                    body.scrollTop = 0;
                     //if (screen.availHeight - ck.viewport[0].offsetHeight 
                             //> ck.headerHeight + 10) {
                         //location.reload();
@@ -892,9 +906,11 @@ define([
                 return;
             }
         }
-        if (!supports.OVERFLOWSCROLL && next === ck.loadingCard) {
+        ck.hideTopbar();
+        if (!supports.UNIVERSAL_TRANS 
+                && next === ck.loadingCard) {
             if (true_link) {
-                location.href = true_link;
+                ck.openURL(true_link);
             }
             return;
         }
@@ -904,8 +920,7 @@ define([
             push_history(current[0].id, next_id, true_link);
         }
         ck.disableControl();
-        //ck.showTopbar();
-        if (!supports.OVERFLOWSCROLL) {
+        if (!supports.UNIVERSAL_TRANS) {
             ck.loadingCard.addClass('moving').show();
             setTimeout(function(){
                 ck.changeView(next);
@@ -913,6 +928,7 @@ define([
                 ck.loadingCard.hide().removeClass('moving');
                 ck.enableControl();
                 ck.sessionLocked = false;
+                ck.showTopbar();
             }, 400);
             return;
         }
@@ -939,8 +955,8 @@ define([
                     clear_footprint();
                     location.href = true_link;
                 }
-            //} else {
-                //ck.enableControl();
+            } else {
+                ck.showTopbar();
             }
         });
     }
@@ -952,6 +968,7 @@ define([
             });
             return;
         }
+        ck.hideTopbar();
         ck.sessionLocked = true;
         var prev = $('#' + prev_id);
         var current = ck.viewport;
@@ -961,7 +978,6 @@ define([
             //return;
         //}
         ck.disableControl();
-        //ck.showTopbar();
         choreo.transform(current[0], 'translateX', '0px');
         current.addClass('moving');
         ck.changeView(prev);
@@ -983,12 +999,14 @@ define([
                 if (!document.referrer || document.referrer === location.href) {
                     location.reload(true);
                 }
+            } else {
+                ck.showTopbar();
             }
         });
     }
 
     function push_history(prev_id, next_id, link, opt){
-        if (supports.OVERFLOWSCROLL) {
+        if (supports.UNIVERSAL_TRANS) {
             history.pushState({
                 prev: prev_id,
                 next: next_id,
@@ -1063,7 +1081,7 @@ define([
     }
 
     function prevent_window_scroll(){
-        if (!supports.SAFARI_TOPBAR || !supports.OVERFLOWSCROLL) {
+        if (supports.WINDOW_SCROLL) {
             return;
         }
         var vp = ck.viewport[0],
@@ -1094,9 +1112,12 @@ define([
             return;
         }
         if (opt.target !== '_self') {
-            window.open(true_link, opt.target);
+            open_window(true_link, opt.target);
         } else {
+            ck.hideTopbar();
             if (supports.PREVENT_CACHE) {
+                ck.viewport.hide();
+                ck.changeView(ck.loadingCard);
                 location.href = true_link;
                 return;
             }
@@ -1114,6 +1135,14 @@ define([
                 ck.sessionLocked = false;
                 location.href = true_link;
             }, 10);
+        }
+    }
+
+    function open_window(url, target){
+        if (supports.NEW_WIN) {
+            window.open(url, target);
+        } else {
+            $('<a href="' + url + '" target="' + target + '"></a>').trigger('click');
         }
     }
 

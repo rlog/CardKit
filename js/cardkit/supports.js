@@ -19,19 +19,31 @@ define([
             && !browsers.aosp
             && !is_ios5,
 
+        NEW_WIN: !is_ios5 && !browsers.aosp,
+
         SAFARI_OVERFLOWSCROLL: "webkitOverflowScrolling" in body.style,
 
-        SAFARI_TOPBAR: !!browsers.mobilesafari
+        PREVENT_WINDOW_SCROLL: !!browsers.mobilesafari,
+
+        HIDE_TOPBAR: !!browsers.mobilesafari
 
     };
 
     exports.PREVENT_CACHE = !exports.HISTORY 
         && !!(browsers.aosp || browsers.mobilesafari);
 
-    exports.OVERFLOWSCROLL = exports.HISTORY
+    exports.CARD_SCROLL = !browsers.aosp 
+        && !is_ios5
+        && !is_desktop;
+
+    exports.UNIVERSAL_TRANS = exports.HISTORY
+        && exports.CARD_SCROLL
         && !browsers.aosp 
         && !is_ios5
         && !is_desktop;
+
+    exports.WINDOW_SCROLL = !exports.CARD_SCROLL 
+        || browsers.os === 'android';
 
     return exports;
 
