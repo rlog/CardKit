@@ -83,9 +83,12 @@ module.exports = function(grunt) {
                 options: {
                     optimizationLevel: 3
                 },
-                files: {
-                    '<%= meta.targetDir %>/pics/': 'pics/**/*.{png,jpg}'
-                }
+                files: [{
+                    expand: true,
+                    cwd: 'pics/',
+                    src: ['**/*.{png,jpg}'],
+                    dest: '<%= meta.targetDir %>/pics/'
+                }]
             }
         },
 
@@ -190,12 +193,12 @@ module.exports = function(grunt) {
                     asi: true 
                 },
                 files: {
-                    src: ['./*.js', 'js/**/*.js', '!js/mod/**']
+                    src: ['./*.js', 'js/**/*.js', '!js/mod/**', '!js/cardkit/tpl/**']
                 }
             },
             dist: {
                 files: {
-                    src: ['./*.js', 'js/**/*.js', '!js/mod/**']
+                    src: ['./*.js', 'js/**/*.js', '!js/mod/**', '!js/cardkit/tpl/**']
                 }
             }
         },

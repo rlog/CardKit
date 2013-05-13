@@ -1,21 +1,22 @@
 
 .moui-select {
   @extend %block;
-
-  background-image:$folder_icon;
-  background-repeat:no-repeat;
+  @extend %unfold-icon;
   background-position:right center;
   background-origin: content-box;
   background-size:10px;
   padding: 0 5px 0 0;
 
+  button.enabled,
   span {
+    @include appearance(none);
     display:block;
     height:100%;
     text-align:left;
     background:#fff;
     padding: 0 (15px/2);
     margin: 0 15px 0 0;
+    border:none;
     border-right:1px solid #B2B2B2;
     font-size:$title_size;
     font-weight:normal;
@@ -27,8 +28,9 @@
 
   &:active {
     @extend %block-pressed;
-    background-image:$folder_icon;
+    @extend %unfold-icon;
 
+    button.enabled,
     span {
       @include box-shadow(inset 0 1px 2px rgba(115,115,115,.8));
     }

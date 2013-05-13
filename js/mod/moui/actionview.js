@@ -20,14 +20,14 @@ define('moui/actionview', [
                     </div>\
                 </div>\
                 <footer>\
-                    <input type="button" class="confirm" data-is-default="true">\
                     <input type="button" class="cancel">\
+                    <input type="button" class="confirm" data-is-default="true">\
                 </footer>\
             </div>',
 
         default_config = {
             className: 'moui-actionview',
-            closeDelay: 300,
+            closeDelay: 500,
             confirmText: '确认',
             cancelText: '取消',
             options: null,

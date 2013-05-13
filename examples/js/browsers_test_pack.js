@@ -1470,15 +1470,26 @@ define('mo/console', [
         },
         RE_CODE = /^function[^(]*\([^)]*\)[^{]*\{([.\s\S]*)\}$/;
 
+    console._ccBuffer = [];
+
     console.config = function(opt){
-        this.output = opt.output;
+
+        if (opt.output) {
+            this._ccOutput = opt.output;
+            this._ccOutput.innerHTML = this._ccBuffer.join('');
+        }
+
+        if (opt.record !== undefined) {
+            this._recording = opt.record;
+            if (!opt.record) {
+                console.cc();
+            }
+        }
+
         return this;
     };
 
     console.enable = function(){
-        if (!this.output) {
-            this.output = default_output();
-        }
         for (var i in origin_console) {
             console[i] = console_api(i);
         }
@@ -1492,6 +1503,24 @@ define('mo/console', [
         }
         console.run = console.log;
         return this;
+    };
+
+    console.cc = function(newlog){
+        if (newlog === undefined) {
+            return this._ccBuffer.join('');
+        } else {
+            this._ccBuffer.push(newlog);
+            var result = this._ccBuffer.join('');
+            if (!this._recording) {
+                //if (!this._ccOutput) {
+                    //this._ccOutput = default_output();
+                //}
+                if (this._ccOutput) {
+                    this._ccOutput.innerHTML = result;
+                }
+            }
+            return result;
+        }
     };
 
     function run(fn, opt){
@@ -1514,25 +1543,21 @@ define('mo/console', [
             if (_.isFunction(origin_console[method])) {
                 origin_console[method].apply(console, arguments);
             }
-            var output = this.output = this.output || default_output(),
-                content = output.innerHTML,
-                result = content && /\S/.test(content) ? [content] : [];
-            result.push.call(result, '<p>'
+            console.cc('<p>'
                 + '<span class="type type-' + method + '"></span>'
                 + '<span class="log">'
                 + Array.prototype.slice.call(arguments)
                     .map(escape_log, method).join('</span><span class="log">')
                 + '</span></p>');
-            output.innerHTML = result.join('');
         };
     }
 
-    function default_output(){
-        var output = document.createElement('DIV');
-        output.setAttribute('id', 'console');
-        document.body.insertBefore(output, document.body.firstChild);
-        return output;
-    }
+    //function default_output(){
+        //var output = document.createElement('DIV');
+        //output.setAttribute('id', 'console');
+        //document.body.insertBefore(output, document.body.firstChild);
+        //return output;
+    //}
 
     function escape_log(text){
         var method = this;
@@ -3640,7 +3665,8 @@ define("dollar/origin", [
                 nodes.prevObject = contexts = this;
             }
             if (/^#[\w_]+$/.test(selector)) {
-                var elm = (contexts[0] || doc).getElementById(selector.substr(1));
+                var elm = ((contexts[0] || doc).getElementById 
+                    || doc.getElementById).call(doc, selector.substr(1));
                 if (elm) {
                     nodes.push(elm);
                 }
@@ -4491,10 +4517,11 @@ define('momo/base', [
 
         once: function(ev, handler, node){
             var self = this;
-            this.bind(ev, function fn(){
+            this.bind(ev, fn, node);
+            function fn(){
                 self.unbind(ev, fn, node);
                 handler.apply(this, arguments);
-            }, node);
+            }
         },
 
         // implement
@@ -4581,6 +4608,7 @@ define('momo/scroll', [
             self._scrollDown = null;
             self._lastY = t.clientY;
             self._scrollY = null;
+            self._ended = false;
             if (self.scrollingNode) {
                 var scrolling = self._scrolling;
                 self._scrolling = false;
@@ -4588,10 +4616,13 @@ define('momo/scroll', [
                 self.once(self.MOVE, function(){
                     self.once('scroll', function(){
                         if (tm === self._tm) {
-                            self._scrollY = self.scrollingNode.scrollTop;
                             if (!scrolling) {
                                 self._started = true;
                                 self.trigger({ target: self.node }, self.event.scrollstart);
+                                if (self._ended) {
+                                    self._ended = false;
+                                    self.trigger({ target: self.node }, self.event.scrollend);
+                                }
                             }
                         }
                     }, self.scrollingNode);
@@ -4617,11 +4648,15 @@ define('momo/scroll', [
             // end
             if (self._scrollY !== null) {
                 var vp = self.scrollingNode,
-                    gap = Math.abs(vp.scrollTop - self._scrollY);
+                    gap = Math.abs(vp.scrollTop - self._scrollY) || 0;
                 if (self._scrollY >= 0 && (self._scrollY <= vp.scrollHeight + vp.offsetHeight)
-                        && (gap && gap < self._config.scrollEndGap)) {
-                    self._started = false;
-                    self.trigger(node, self.event.scrollend);
+                        && gap < self._config.scrollEndGap) {
+                    if (self._started) {
+                        self.trigger(node, self.event.scrollend);
+                        self._started = false;
+                    } else {
+                        self._ended = true;
+                    }
                 } else {
                     var tm = self._tm;
                     self._scrolling = true;
@@ -4783,20 +4818,33 @@ define('momo/tap', [
 
     _.mix(MomoTap.prototype, {
 
-        EVENTS: ['tap', 'doubletap', 'hold'],
+        EVENTS: ['tap', 'doubletap', 'hold', 'tapstart', 'tapcancel'],
         DEFAULT_CONFIG: {
             'tapRadius': 10,
             'doubleTimeout': 300,
+            'tapThreshold': 0,
             'holdThreshold': 500
         },
 
         press: function(e){
-            var t = this.SUPPORT_TOUCH ? e.touches[0] : e;
-            this._startTime = e.timeStamp;
-            this._startTarget = t.target;
-            this._startPosX = t.clientX;
-            this._startPosY = t.clientY;
-            this._movePosX = this._movePosY = this._moveTarget = NaN;
+            var self = this,
+                t = self.SUPPORT_TOUCH ? e.touches[0] : e;
+            self._startTime = e.timeStamp;
+            self._startTarget = t.target;
+            self._startPosX = t.clientX;
+            self._startPosY = t.clientY;
+            self._movePosX = self._movePosY = self._moveTarget = NaN;
+            self._started = false;
+            self._pressTrigger = function(){
+                self._started = true;
+                self.trigger(e, self.event.tapstart);
+                self._pressTrigger = nothing;
+            };
+            self._activeTimer = setTimeout(function(){
+                if (!is_moved(self)) {
+                    self._pressTrigger();
+                }
+            }, self._config.tapThreshold);
         },
 
         move: function(e){
@@ -4808,28 +4856,54 @@ define('momo/tap', [
 
         release: function(e){
             var self = this,
-                tm = e.timeStamp;
-            if (this._moveTarget && this._moveTarget !== this._startTarget 
-                    || Math.abs(self._movePosX - self._startPosX) > self._config.tapRadius
-                    || Math.abs(self._movePosY - self._startPosY) > self._config.tapRadius) {
+                tm = e.timeStamp,
+                moved = is_moved(self);
+            clearTimeout(self._activeTimer);
+            if (moved || tm - self._startTime < self._config.tapThreshold) {
+                if (!moved) {
+                    self._firstTap = tm;
+                }
+                if (self._started) {
+                    self.trigger(e, self.event.tapcancel);
+                }
                 return;
             }
-            if (tm - self._startTime > self._config.holdThreshold) {
+            if (!self._started) {
+                self._pressTrigger();
+            }
+            if (tm - self._startTime > self._config.holdThreshold + self._config.tapThreshold) {
                 self.trigger(e, self.event.hold);
             } else {
-                if (self._lastTap 
-                        && (tm - self._lastTap < self._config.doubleTimeout)) {
+                if (self._firstTap
+                        && (tm - self._firstTap < self._config.doubleTimeout)) {
                     e.preventDefault();
                     self.trigger(e, self.event.doubletap);
-                    self._lastTap = 0;
+                    self._firstTap = 0;
                 } else {
                     self.trigger(e, self.event.tap);
-                    self._lastTap = tm;
+                    self._firstTap = tm;
                 }
+            }
+        },
+
+        cancel: function(e){
+            clearTimeout(this._activeTimer);
+            if (this._started) {
+                this.trigger(e, this.event.tapcancel);
             }
         }
     
     });
+
+    function is_moved(self){
+        if (self._moveTarget && self._moveTarget !== self._startTarget 
+                || Math.abs(self._movePosX - self._startPosX) > self._config.tapRadius
+                || Math.abs(self._movePosY - self._startPosY) > self._config.tapRadius) {
+            return true;
+        }
+    }
+
+    function nothing(){}
 
     function exports(elm, opt, cb){
         return new exports.Class(elm, opt, cb);

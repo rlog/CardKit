@@ -18,7 +18,9 @@ define([
     boxParser, listParser, miniParser, formParser,
     supports){
 
-    var TPL_TIPS = '<div class="ck-top-tips">'
+    var SCRIPT_TAG = 'script[type="text/cardscript"]',
+
+        TPL_TIPS = '<div class="ck-top-tips">'
         + (supports.HIDE_TOPBAR ? '长按顶部导航条，可拖出浏览器地址栏' : '')
         + '</div>';
 
@@ -31,6 +33,10 @@ define([
                     blank: card.data('cfgBlank')
                 };
 
+            if (!opt.isModal) {
+                card.find(SCRIPT_TAG + '[data-hook="source"]').forEach(run_script);
+            }
+
             var has_content = exports.initUnit(units, raw);
 
             if (!has_content && !opt.isModal && config.blank != 'false') {
@@ -40,11 +46,27 @@ define([
             }
 
             if (!opt.isModal) {
+
                 card.append(footer.clone())
                     .prepend($('.ck-banner-unit', card))
                     .prepend(TPL_TIPS);
+
+                card.find(SCRIPT_TAG + '[data-hook="ready"]').forEach(run_script);
+
             }
 
+        },
+
+        openCard: function(card, opt){
+            if (!opt.isModal) {
+                card.find(SCRIPT_TAG + '[data-hook="open"]').forEach(run_script);
+            }
+        },
+
+        closeCard: function(card, opt){
+            if (!opt.isModal) {
+                card.find(SCRIPT_TAG + '[data-hook="close"]').forEach(run_script);
+            }
         },
 
         initUnit: function(units, raw){
@@ -73,7 +95,8 @@ define([
         mini: function(unit, raw){
             var data = miniParser(unit, raw);
             data.items = data.items.filter(function(item){
-                if (!item.content || !item.content.length) {
+                if (!item.title && !item.author 
+                        && (!item.content || !item.content.length)) {
                     return false;
                 }
                 return true;
@@ -83,10 +106,8 @@ define([
                 $(unit).remove();
                 return;
             }
-            if (!data.style) {
-                data.config.limit = 1;
-            }
-            if (data.config.limit) {
+            if (data.config.limit 
+                    && data.config.limit < data.items.length) {
                 data.items.length = data.config.limit;
             }
             unit.innerHTML = tpl.convertTpl(tpl_mini.template, data, 'data');
@@ -110,7 +131,8 @@ define([
                 }
                 return true;
             }, data);
-            if (data.config.limit) {
+            if (data.config.limit 
+                    && data.config.limit < data.items.length) {
                 data.items.length = data.config.limit;
             }
             if (!data.items.length 
@@ -134,6 +156,10 @@ define([
         }
     
     };
+
+    function run_script(script){
+        window["eval"].call(window, script.innerHTML);
+    }
 
     return exports;
 

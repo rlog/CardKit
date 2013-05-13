@@ -813,7 +813,9 @@ define("../cardkit/supports", [
         document = window.document,
         body = document.body,
         is_android = browsers.os === 'android',
-        is_ios5 = browsers.engine === 'webkit'
+        is_ios = browsers.os === 'iphone' || browsers.os === 'ipad',
+        is_ios5 = is_ios
+            && browsers.engine === 'webkit'
             && parseInt(browsers.engineversion, 10) < 536,
         is_mobilefirefox = browsers.mozilla && is_android,
         is_desktop = browsers.os === 'mac'
@@ -834,13 +836,14 @@ define("../cardkit/supports", [
             && !is_ios5
             && !is_desktop,
 
-        SAFARI_OVERFLOWSCROLL: "webkitOverflowScrolling" in body.style,
-
         PREVENT_WINDOW_SCROLL: !!browsers.mobilesafari,
 
         HIDE_TOPBAR: !!browsers.mobilesafari
 
     };
+
+    exports.SAFARI_OVERFLOWSCROLL = "webkitOverflowScrolling" in body.style
+        && (exports.CARD_SCROLL || is_ios5);
 
     exports.PREVENT_CACHE = browsers.aosp 
         || browsers.mobilesafari && !exports.HISTORY;
@@ -1568,7 +1571,8 @@ define("dollar/origin", [
                 nodes.prevObject = contexts = this;
             }
             if (/^#[\w_]+$/.test(selector)) {
-                var elm = (contexts[0] || doc).getElementById(selector.substr(1));
+                var elm = ((contexts[0] || doc).getElementById 
+                    || doc.getElementById).call(doc, selector.substr(1));
                 if (elm) {
                     nodes.push(elm);
                 }
@@ -2253,7 +2257,11 @@ define("../cardkit/parser/util", [
   "mo/lang"
 ], function($){
 
+    var RE_CKD_NAME = /([^\w-])ckd\-([\w\-]+)(?=[^\w\-])/;
+
     var exports = {
+
+        mergeSource: mergeSource,
 
         getSource: function(node, raw){
             var sid = $(node).data('source');
@@ -2263,52 +2271,178 @@ define("../cardkit/parser/util", [
             }
         },
 
-        getCustom: function(tag, unit, raw, fn){
-            var tags = unit.find(tag);
-            if (!tags.length) {
-                return;
-            }
-            return tags.map(function(elm){
-                var source = exports.getSource(elm, raw);
-                if (source) {
-                    var content = source.find(tag);
-                    if (!content[0]) {
-                        content = source;
-                    }
-                    return fn(content, elm);
-                }
-                return fn(elm);
-            });
-        },
+        getHref: getHref,
 
-        getHref: function(nodes){
-            for (var href, i = 0, l = nodes.length; i < l; i++) {
-                href = nodes[i].href;
-                if (href) {
-                    return href;
-                }
-            }
-        },
+        getText: getText,
 
-        getText: function(nodes){
-            return nodes.map(function(elm){
-                return elm.textContent;
-            }).join('');
-        },
+        getInnerHTML: getInnerHTML,
 
-        getInnerHTML: function(nodes){
-            return nodes.map(function(elm){
-                return elm.innerHTML;
-            }, $).join('');
-        },
+        getOuterHTML: getOuterHTML,
 
-        getOuterHTML: function(nodes){
-            return nodes.map(function(elm){
-                return elm.outerHTML;
-            }, $).join('');
-        }
+        getCustom: getCustom,
+
+        getHd: getHd,
+
+        getItemData: getItemData,
+
+        getItemDataOuter: getItemDataOuter
 
     }; 
+
+    function getHref(nodes){
+        if (!nodes) {
+            return;
+        }
+        for (var href, i = 0, l = nodes.length; i < l; i++) {
+            href = nodes[i].href;
+            if (href) {
+                return href;
+            }
+        }
+    }
+
+    function getText(nodes){
+        return nodes.map(function(elm){
+            return elm.textContent;
+        }).join('');
+    }
+
+    function getInnerHTML(nodes){
+        return nodes.map(function(elm){
+            return elm.innerHTML;
+        }, $).join('');
+    }
+
+    function getOuterHTML(nodes, name){
+        return nodes.map(function(elm){
+            var html = elm.outerHTML;
+            if (!name) {
+                return html;
+            }
+            return html.replace(RE_CKD_NAME, function($0, $1, $2){ 
+                if ($2 === name) {
+                    return $1 + 'ck-' + $2;
+                } else {
+                    return $0;
+                }
+            });
+        }, $).join('');
+    }
+
+    function getCustom(tag, unit, raw, fn, ckdname){
+        var tags = unit.find(tag);
+        if (!tags.length) {
+            return tags;
+        }
+        return tags.map(function(elm){
+            var source = exports.getSource(elm, raw);
+            if (source) {
+                var content = source.find(tag);
+                if (!content[0]) {
+                    content = source;
+                }
+                return fn(content, elm, ckdname, raw);
+            }
+            return fn(elm, undefined, ckdname, raw);
+        });
+    }
+
+    function mergeSource(data, custom, fn, raw){
+        if (custom && typeof custom === 'object') {
+            custom = fn(custom, null, null, raw);
+            for (var i in custom) {
+                if (custom[i] 
+                        && (!(custom[i] instanceof Array) 
+                            && true || custom[i].length)) {
+                    data[i] = custom[i];
+                }
+            }
+        }
+        return data;
+    }
+
+    function getHd(source, custom){
+        source = $(source);
+        var data = source && {
+            html: getInnerHTML(source),
+            href: getHref(source)
+        } || {};
+        return mergeSource(data, custom, getHd);
+    }
+
+    function getItemData(item, custom, ckdname, raw){
+        item = $(item);
+        var title_data = getCustom('.ckd-title', item, raw, getItemDataInner, 'title')[0],
+            author_data = getCustom('.ckd-author', item, raw, getItemDataInner, 'author')[0],
+            icon_src = getCustom('.ckd-icon', item, raw, getItemDataSrc, 'icon')[0],
+            title_url_alone,
+            title_url_extern,
+            title_url,
+            author_url_extern,
+            author_url;
+        if (!title_data && !author_data && !icon_src) {
+            title_data = getInnerHTML(item);
+            title_url_alone = item.hasClass('ckd-title-link-alone');
+            title_url_extern = item.hasClass('ckd-title-link-extern');
+            title_url = getHref(item);
+        } else {
+            title_url_alone = getCustom('.ckd-title-link-alone', item, raw, getItemDataHref, 'title-link-alone')[0];
+            title_url_extern = title_url_alone 
+                    || getCustom('.ckd-title-link-extern', item, raw, getItemDataHref, 'title-link-extern')[0];
+            title_url = title_url_extern
+                    || getCustom('.ckd-title-link', item, raw, getItemDataHref, 'title-link')[0]
+                    || getCustom('.ckd-title', item, raw, getItemDataHref, 'title')[0];
+            author_url_extern = getCustom('.ckd-author-link-extern', item, raw, getItemDataHref, 'author-link-extern')[0];
+            author_url = author_url_extern
+                || getCustom('.ckd-author-link', item, raw, getItemDataHref, 'author-link')[0]
+                || getCustom('.ckd-author', item, raw, getItemDataHref, 'author')[0];
+        }
+        var data = {
+            title: title_data,
+            href: !title_url_alone && title_url,
+            hrefAlone: title_url_alone,
+            hrefExtern: title_url_extern,
+            titlePrefix: getCustom('.ckd-title-prefix', item, raw, getItemDataOuter, 'title-prefix'),
+            titleSuffix: getCustom('.ckd-title-suffix', item, raw, getItemDataOuter, 'title-suffix'),
+            titleTag: getCustom('.ckd-title-tag', item, raw, getItemDataOuter, 'title-tag'),
+            icon: icon_src,
+            desc: getCustom('.ckd-desc', item, raw, getItemDataOuter, 'desc')
+                .concat(getCustom('.ckd-subtitle', item, raw, getItemDataOuter, 'subtitle')),
+            info: getCustom('.ckd-info', item, raw, getItemDataOuter, 'info'),
+            content: getCustom('.ckd-content', item, raw, getItemDataOuter, 'content'),
+            meta: getCustom('.ckd-meta', item, raw, getItemDataOuter, 'meta'),
+            author: author_data,
+            authorUrl: author_url,
+            authorUrlExtern: author_url_extern,
+            authorPrefix: getCustom('.ckd-author-prefix', item, raw, getItemDataOuter, 'author-prefix'),
+            authorSuffix: getCustom('.ckd-author-suffix', item, raw, getItemDataOuter, 'author-suffix'),
+            avatar: getCustom('.ckd-avatar', item, raw, getItemDataSrc, 'avatar')[0],
+            authorDesc: getCustom('.ckd-author-desc', item, raw, getItemDataOuter, 'author-desc'),
+            authorInfo: getCustom('.ckd-author-info', item, raw, getItemDataOuter, 'author-info'),
+            authorMeta: getCustom('.ckd-author-meta', item, raw, getItemDataOuter, 'author-meta')
+        };
+        return mergeSource(data, custom, getItemData, raw);
+    }
+
+    function getItemDataSrc(source){
+        source = $(source);
+        return source.attr('src');
+    }
+
+    function getItemDataHref(source){
+        source = $(source);
+        return getHref(source);
+    }
+
+    function getItemDataInner(source){
+        source = $(source);
+        return getInnerHTML(source);
+    }
+
+    function getItemDataOuter(source, custom, ckdname){
+        source = $(source);
+        return getOuterHTML(source, ckdname);
+    }
 
     return exports;
 
@@ -2323,6 +2457,10 @@ define("../cardkit/parser/form", [
   "../cardkit/parser/util"
 ], function($, _, util){
     
+    var getCustom = util.getCustom,
+        getHd = util.getHd,
+        getItemDataOuter = util.getItemDataOuter;
+
     function exports(unit, raw){
         unit = $(unit);
         var source = util.getSource(unit, raw),
@@ -2330,161 +2468,47 @@ define("../cardkit/parser/form", [
                 blank: unit.data('cfgBlank'),
                 plainhd: unit.data('cfgPlainhd')
             },
-            hd = get_hd(source && source.find('.ckd-hd')),
-            hd_opt = get_all_outer(source && source.find('.ckd-hdopt')),
-            ft = get_hd(source && source.find('.ckd-ft')),
-            items = source && source.find('.ckd-item').map(get_item),
-            custom_hd = (util.getCustom('.ckd-hd', unit, raw, get_hd) || [{}])[0],
-            custom_hd_opt = (util.getCustom('.ckd-hdopt', unit, raw, get_all_outer) || []).join(''),
-            custom_ft = (util.getCustom('.ckd-ft', unit, raw, get_hd) || [{}])[0],
-            custom_items = util.getCustom('.ckd-item', unit, raw, get_item) || $();
+            hd = getHd(source && source.find('.ckd-hd')),
+            hd_link_extern = getHd(source && source.find('.ckd-hd-link-extern')),
+            hd_link = hd_link_extern.href 
+                ? hd_link_extern
+                : getHd(source && source.find('.ckd-hd-link')),
+            hd_opt = getItemDataOuter(source && source.find('.ckd-hdopt'), 'hdopt'),
+            ft = getHd(source && source.find('.ckd-ft')),
+            items = source && source.find('.ckd-item').map(function(elm){
+                return getFormItemData(elm, null, null, raw);
+            }) || $(),
+            custom_hd = getCustom('.ckd-hd', unit, raw, getHd)[0] || {},
+            custom_hd_link_extern = getCustom('.ckd-hd-link-extern', unit, raw, getHd)[0] || {},
+            custom_hd_link = custom_hd_link_extern.href 
+                ? custom_hd_link_extern
+                : (getCustom('.ckd-hd-link', unit, raw, getHd)[0] || {}),
+            custom_hd_opt = getCustom('.ckd-hdopt', unit, raw, getItemDataOuter, 'hdopt').join(''),
+            custom_ft = getCustom('.ckd-ft', unit, raw, getHd)[0] || {},
+            custom_items = getCustom('.ckd-item', unit, raw, getFormItemData);
         var data = {
             config: config,
             style: unit.data('style'),
             items: custom_items.concat(items || $()),
             hd: custom_hd.html === undefined ? hd.html : custom_hd.html,
-            hd_url: custom_hd.href || custom_hd.href !== null && hd.href,
+            hd_url: custom_hd_link.href 
+                || custom_hd_link.href !== null && hd_link.href 
+                || custom_hd.href 
+                || custom_hd.href !== null && hd.href,
+            hd_url_extern: custom_hd_link_extern.href || hd_link_extern.href,
             hd_opt: custom_hd_opt + hd_opt,
             ft: custom_ft.html === undefined ? ft.html : custom_ft.html
         };
         return data;
     }
 
-    function get_item(item, custom){
+    function getFormItemData(item, custom, ckdname, raw){
         item = $(item);
         var data = {
-            content: util.getInnerHTML(item)
+            content: getCustom('.ckd-content', item, raw, getItemDataOuter, 'content').join('') 
+                || util.getInnerHTML(item),
         };
-        if (custom && typeof custom === 'object') {
-            custom = get_item(custom);
-            for (var i in custom) {
-                if (custom[i]) {
-                    data[i] = custom[i];
-                }
-            }
-        }
-        return data;
-    }
-
-    function get_hd(source, custom){
-        source = $(source);
-        var data = source && {
-            html: util.getInnerHTML(source),
-            href: util.getHref(source)
-        } || {};
-        if (custom && typeof custom === 'object') {
-            custom = get_hd(custom);
-            for (var i in custom) {
-                if (custom[i]) {
-                    data[i] = custom[i];
-                }
-            }
-        }
-        return data;
-    }
-
-    function get_all_outer(source){
-        source = $(source);
-        var data = util.getOuterHTML(source) || '';
-        source.remove();
-        return data;
-    }
-
-    return exports;
-
-});
-
-/* @source ../cardkit/parser/mini.js */;
-
-
-define("../cardkit/parser/mini", [
-  "dollar",
-  "mo/lang",
-  "../cardkit/parser/util"
-], function($, _, util){
-    
-    var getInnerHTML = util.getInnerHTML;
-
-    function exports(unit, raw){
-        unit = $(unit);
-        var source = util.getSource(unit, raw),
-            config = {
-                blank: unit.data('cfgBlank'),
-                limit: unit.data('cfgLimit'),
-                plain: unit.data('cfgPlain'),
-                plainhd: unit.data('cfgPlainhd')
-            },
-            hd = get_hd(source && source.find('.ckd-hd')),
-            hd_opt = get_all_outer(source && source.find('.ckd-hdopt')),
-            items = source && source.find('.ckd-item'),
-            custom_hd = (util.getCustom('.ckd-hd', unit, raw, get_hd) || [{}])[0],
-            custom_hd_opt = (util.getCustom('.ckd-hdopt', unit, raw, get_all_outer) || []).join(''),
-            custom_items = util.getCustom('.ckd-item', unit, raw, get_item) || $();
-        if (source && !items[0]) {
-            items = source;
-        }
-        items = items && items.map(get_item);
-        var data = {
-            config: config,
-            style: unit.data('style'),
-            items: custom_items.concat(items || $()),
-            hd_opt: custom_hd_opt + hd_opt,
-            hd: custom_hd.html === undefined ? hd.html : custom_hd.html,
-            hd_url: custom_hd.href || custom_hd.href !== null && hd.href
-        };
-        return data;
-    }
-
-    function get_item(item, custom){
-        item = $(item);
-        var title = item.find('.ckd-title'),
-            author = item.find('.ckd-author');
-        var data = {
-            title: getInnerHTML(title),
-            href: util.getHref(title),
-            author: getInnerHTML(author),
-            author_url: util.getHref(author),
-            info: getInnerHTML(item.find('.ckd-info')),
-            subtitle: getInnerHTML(item.find('.ckd-subtitle')),
-            meta: item.find('.ckd-meta').map(function(node){
-                return node.innerHTML;
-            }),
-            icon: item.find('.ckd-icon').attr('src'),
-            content: util.getOuterHTML(item.find('.ckd-content'))
-        };
-        if (custom && typeof custom === 'object') {
-            custom = get_item(custom);
-            for (var i in custom) {
-                if (custom[i]) {
-                    data[i] = custom[i];
-                }
-            }
-        }
-        return data;
-    }
-
-    function get_hd(source, custom){
-        source = $(source);
-        var data = source && {
-            html: getInnerHTML(source),
-            href: util.getHref(source)
-        } || {};
-        if (custom && typeof custom === 'object') {
-            custom = get_hd(custom);
-            for (var i in custom) {
-                if (custom[i]) {
-                    data[i] = custom[i];
-                }
-            }
-        }
-        return data;
-    }
-
-    function get_all_outer(source){
-        source = $(source);
-        var data = util.getOuterHTML(source) || '';
-        source.remove();
-        return data;
+        return util.mergeSource(data, custom, getFormItemData, raw);
     }
 
     return exports;
@@ -2500,7 +2524,10 @@ define("../cardkit/parser/list", [
   "../cardkit/parser/util"
 ], function($, _, util){
     
-    var getInnerHTML = util.getInnerHTML;
+    var getCustom = util.getCustom,
+        getHd = util.getHd,
+        getItemData = util.getItemData,
+        getItemDataOuter = util.getItemDataOuter;
 
     function exports(unit, raw){
         unit = $(unit);
@@ -2513,78 +2540,42 @@ define("../cardkit/parser/list", [
                 plain: unit.data('cfgPlain'),
                 plainhd: unit.data('cfgPlainhd')
             },
-            hd = get_hd(source && source.find('.ckd-hd')),
-            hd_opt = get_all_outer(source && source.find('.ckd-hdopt')),
-            ft = get_hd(source && source.find('.ckd-ft')),
-            items = source && source.find('.ckd-item').map(get_item),
-            custom_hd = (util.getCustom('.ckd-hd', unit, raw, get_hd) || [{}])[0],
-            custom_hd_opt = (util.getCustom('.ckd-hdopt', unit, raw, get_all_outer) || []).join(''),
-            custom_ft = (util.getCustom('.ckd-ft', unit, raw, get_hd) || [{}])[0],
-            custom_items = util.getCustom('.ckd-item', unit, raw, get_item) || $();
+            hd = getHd(source && source.find('.ckd-hd')),
+            hd_link_extern = getHd(source && source.find('.ckd-hd-link-extern')),
+            hd_link = hd_link_extern.href 
+                ? hd_link_extern
+                : getHd(source && source.find('.ckd-hd-link')),
+            hd_opt = getItemDataOuter(source && source.find('.ckd-hdopt'), 'hdopt'),
+            ft = getHd(source && source.find('.ckd-ft')),
+            items = source && source.find('.ckd-item').map(function(elm){
+                return getItemData(elm, null, null, raw);
+            }) || $(),
+            custom_hd = getCustom('.ckd-hd', unit, raw, getHd)[0] || {},
+            custom_hd_link_extern = getCustom('.ckd-hd-link-extern', unit, raw, getHd)[0] || {},
+            custom_hd_link = custom_hd_link_extern.href 
+                ? custom_hd_link_extern
+                : (getCustom('.ckd-hd-link', unit, raw, getHd)[0] || {}),
+            custom_hd_opt = getCustom('.ckd-hdopt', unit, raw, getItemDataOuter, 'hdopt').join(''),
+            custom_ft = getCustom('.ckd-ft', unit, raw, getHd)[0] || {},
+            custom_items = util.getCustom('.ckd-item', unit, raw, getItemData);
         var data = {
             config: config,
             style: unit.data('style'),
-            items: custom_items.concat(items || $()),
+            items: custom_items.concat(items),
             hd: custom_hd.html === undefined ? hd.html : custom_hd.html,
-            hd_url: custom_hd.href || custom_hd.href !== null && hd.href,
+            hd_url: custom_hd_link.href 
+                || custom_hd_link.href !== null && hd_link.href 
+                || custom_hd.href 
+                || custom_hd.href !== null && hd.href,
+            hd_url_extern: custom_hd_link_extern.href || hd_link_extern.href,
             hd_opt: custom_hd_opt + hd_opt,
             ft: custom_ft.html === undefined ? ft.html : custom_ft.html
         };
-        return data;
-    }
-
-    function get_item(item, custom){
-        item = $(item);
-        var title = item.find('.ckd-title'),
-            author = item.find('.ckd-author');
-        if (!title[0] && util.getHref(item)) {
-            title = item;
+        if (config.plain 
+                || config.plainhd 
+                || data.style === 'split') {
+            data.hasSplitHd = true;
         }
-        var data = {
-            title: getInnerHTML(title),
-            href: util.getHref(title),
-            author: getInnerHTML(author),
-            author_url: util.getHref(author),
-            info: getInnerHTML(item.find('.ckd-info')),
-            subtitle: util.getInnerHTML(item.find('.ckd-subtitle')),
-            meta: item.find('.ckd-meta').map(function(node){
-                return node.innerHTML;
-            }),
-            icon: item.find('.ckd-icon').attr('src'),
-            content: util.getOuterHTML(item.find('.ckd-content'))
-        };
-        if (custom && typeof custom === 'object') {
-            custom = get_item(custom);
-            for (var i in custom) {
-                if (custom[i]) {
-                    data[i] = custom[i];
-                }
-            }
-        }
-        return data;
-    }
-
-    function get_hd(source, custom){
-        source = $(source);
-        var data = source && {
-            html: getInnerHTML(source),
-            href: util.getHref(source)
-        } || {};
-        if (custom && typeof custom === 'object') {
-            custom = get_hd(custom);
-            for (var i in custom) {
-                if (custom[i]) {
-                    data[i] = custom[i];
-                }
-            }
-        }
-        return data;
-    }
-
-    function get_all_outer(source){
-        source = $(source);
-        var data = util.getOuterHTML(source) || '';
-        source.remove();
         return data;
     }
 
@@ -2592,6 +2583,25 @@ define("../cardkit/parser/list", [
 
 });
 
+
+/* @source ../cardkit/parser/mini.js */;
+
+
+define("../cardkit/parser/mini", [
+  "dollar",
+  "mo/lang",
+  "../cardkit/parser/list"
+], function($, _, listParser){
+    
+    function exports(unit, raw){
+        var data = listParser(unit, raw);
+        data.hasSplitHd = true;
+        return data;
+    }
+
+    return exports;
+
+});
 
 /* @source ../cardkit/parser/box.js */;
 
@@ -2602,6 +2612,10 @@ define("../cardkit/parser/box", [
   "../cardkit/parser/util"
 ], function($, _, util){
     
+    var getCustom = util.getCustom,
+        getHd = util.getHd,
+        getItemDataOuter = util.getItemDataOuter;
+
     function exports(unit, raw){
         unit = $(unit);
         var source = util.getSource(unit, raw),
@@ -2610,23 +2624,32 @@ define("../cardkit/parser/box", [
                 plain: unit.data('cfgPlain'),
                 plainhd: unit.data('cfgPlainhd')
             },
-            hd = get_hd(source && source.find('.ckd-hd')),
-            hd_opt = get_all_outer(source && source.find('.ckd-hdopt')),
-            ft = get_hd(source && source.find('.ckd-ft')),
-            contents = source && (
-                util.getOuterHTML(source.find('.ckd-content'))
-                || util.getInnerHTML(source)
-            ),
-            custom_hd = (util.getCustom('.ckd-hd', unit, raw, get_hd) || [{}])[0],
-            custom_hd_opt = (util.getCustom('.ckd-hdopt', unit, raw, get_all_outer) || []).join(''),
-            custom_ft = (util.getCustom('.ckd-ft', unit, raw, get_hd) || [{}])[0];
-        util.getCustom('.ckd-content', unit, raw, replace_content);
+            hd = getHd(source && source.find('.ckd-hd')),
+            hd_link_extern = getHd(source && source.find('.ckd-hd-link-extern')),
+            hd_link = hd_link_extern.href 
+                ? hd_link_extern
+                : getHd(source && source.find('.ckd-hd-link')),
+            hd_opt = getItemDataOuter(source && source.find('.ckd-hdopt'), 'hdopt'),
+            ft = getHd(source && source.find('.ckd-ft')),
+            contents = source && util.getOuterHTML(source.find('.ckd-content')),
+            custom_hd = getCustom('.ckd-hd', unit, raw, take_hd)[0] || {},
+            custom_hd_link_extern = getCustom('.ckd-hd-link-extern', unit, raw, take_hd)[0] || {},
+            custom_hd_link = custom_hd_link_extern.href 
+                ? custom_hd_link_extern
+                : (getCustom('.ckd-hd-link', unit, raw, take_hd)[0] || {}),
+            custom_hd_opt = getCustom('.ckd-hdopt', unit, raw, take_item_outer, 'hdopt').join(''),
+            custom_ft = getCustom('.ckd-ft', unit, raw, take_hd)[0] || {};
+        getCustom('.ckd-content', unit, raw, replace_content);
         var data = {
             config: config,
             style: unit.data('style'),
             content: unit[0].innerHTML + (contents || ''),
             hd: custom_hd.html === undefined ? hd.html : custom_hd.html,
-            hd_url: custom_hd.href || custom_hd.href !== null && hd.href,
+            hd_url: custom_hd_link.href 
+                || custom_hd_link.href !== null && hd_link.href 
+                || custom_hd.href 
+                || custom_hd.href !== null && hd.href,
+            hd_url_extern: custom_hd_link_extern.href || hd_link_extern.href,
             hd_opt: custom_hd_opt + hd_opt,
             ft: custom_ft.html === undefined ? ft.html 
                 : (custom_ft.html || (config.plain || config.paper) && ' ')
@@ -2643,28 +2666,15 @@ define("../cardkit/parser/box", [
         }
     }
 
-    function get_hd(source, custom_source){
-        source = $(source);
-        var data = source && {
-            html: util.getInnerHTML(source),
-            href: util.getHref(source)
-        } || {};
-        if (custom_source && typeof custom_source === 'object') {
-            var custom_data = get_hd(custom_source);
-            for (var i in custom_data) {
-                if (custom_data[i]) {
-                    data[i] = custom_data[i];
-                }
-            }
-        }
-        source.remove();
+    function take_hd(source, custom){
+        var data = getHd(source, custom);
+        $(source).remove();
         return data;
     }
 
-    function get_all_outer(source){
-        source = $(source);
-        var data = util.getOuterHTML(source) || '';
-        source.remove();
+    function take_item_outer(source, custom, ckdname){
+        var data = getItemDataOuter(source, custom, ckdname);
+        $(source).remove();
         return data;
     }
 
@@ -2676,35 +2686,35 @@ define("../cardkit/parser/box", [
 
 define("../cardkit/tpl/unit/blank", [], function(){
 
-    return {"template":"\n<div class=\"ck-blank-unit\">\n    <article>{%=(data.config.blank || '目前还没有内容')%}</article>\n</div>\n"}; 
+    return {"template":"\n<div class=\"ck-blank-unit\">\n    <article class=\"ck-unit-wrap\">\n        <div>{%=(data.config.blank || '目前还没有内容')%}</div>\n    </article>\n</div>\n"}; 
 
 });
 /* @source ../cardkit/tpl/unit/form.js */;
 
 define("../cardkit/tpl/unit/form", [], function(){
 
-    return {"template":"\n<article>\n\n    {% if (data.hd) { %}\n    <header>\n        {% if (data.hd_url) { %}\n        <a href=\"{%= data.hd_url %}\" class=\"ck-link\">{%= data.hd %}</a>\n        {% } else { %}\n        <span>{%= data.hd %}</span>\n        {% } %}\n        {% if (data.hd_opt) { %}\n        <div class=\"ck-hdopt\">{%=data.hd_opt%}</div>\n        {% } %}\n    </header>\n    {% } %}\n\n    <section>\n    {% if (!data.items.length) { %}\n    <div class=\"ck-item blank\">{%=(data.config.blank || '目前还没有内容')%}</div>\n    {% } %}\n    {% data.items.forEach(function(item){ %}\n        <div class=\"ck-item\">\n            {%= item.content %}\n        </div>\n    {% }); %}\n    </section>\n\n    {% if (data.ft) { %}\n    <footer>{%= data.ft %}</footer>\n    {% } %}\n\n</article>\n\n"}; 
+    return {"template":"\n{% function hd(){ %}\n    {% if (data.hd) { %}\n    <header class=\"ck-hd-wrap\">\n\n        <span class=\"ck-hd {%= (data.hd_url && 'clickable' || '') %}\">\n            {% if (data.hd_url) { %}\n            <a href=\"{%= data.hd_url %}\" class=\"ck-link ck-link-mask {%= (data.hd_url_extern ? 'ck-link-extern' : '') %}\"></a>\n            {% } %}\n            <span>{%= data.hd %}</span>\n        </span>\n\n        {% if (data.hd_opt) { %}\n        <div class=\"ck-hdopt-wrap\">{%=data.hd_opt%}</div>\n        {% } %}\n\n    </header>\n    {% } %}\n{% } %}\n\n{% if (data.config.plain || data.config.plainhd) { %}\n    {%= hd() %}\n{% } %}\n\n<article class=\"ck-unit-wrap\">\n\n    {% if (!data.config.plain && !data.config.plainhd) { %}\n        {%= hd() %}\n    {% } %}\n\n    <section>\n    {% if (!data.items.length) { %}\n    <div class=\"ck-item blank\">{%=(data.config.blank || '目前还没有内容')%}</div>\n    {% } %}\n    {% data.items.forEach(function(item){ %}\n        <div class=\"ck-item\">\n            {%= item.content %}\n        </div>\n    {% }); %}\n    </section>\n\n    {% if (data.ft) { %}\n    <footer>{%= data.ft %}</footer>\n    {% } %}\n\n</article>\n\n"}; 
 
 });
 /* @source ../cardkit/tpl/unit/mini.js */;
 
 define("../cardkit/tpl/unit/mini", [], function(){
 
-    return {"template":"\n<article>\n\n    {% if (data.hd) { %}\n    <header>\n        {% if (data.hd_url) { %}\n        <a href=\"{%= data.hd_url %}\" class=\"ck-link\">{%= data.hd %}</a>\n        {% } else { %}\n        <span>{%= data.hd %}</span>\n        {% } %}\n        {% if (data.hd_opt) { %}\n        <div class=\"ck-hdopt\">{%=data.hd_opt%}</div>\n        {% } %}\n    </header>\n    {% } %}\n\n    {% if (data.style === 'slide') { %}\n    <div class=\"ck-slide\"><div class=\"ck-inslide\">\n    {% } %}\n\n        {% if (!data.items.length) { %}\n        <div class=\"ck-item enable blank\">\n            <div class=\"ck-content\">{%=(data.config.blank || '目前还没有内容')%}</div>\n        </div>\n        {% } %}\n\n        {% data.items.forEach(function(item, i){ %}\n        <div class=\"ck-item{%=(i === 0 && ' enable' || '')%}\">\n            {% if (item.title) { %}\n            <p class=\"ck-title\">{%= item.title %}</p>\n            {% } %}\n            <div class=\"ck-content\">\n                {%= item.content %}\n                {% if (item.info) { %}\n                <span class=\"ck-info\">{%= item.info %}</span>\n                {% } %}\n            </div>\n            {% if (item.author) { %}\n\n            <p class=\"ck-initem\">\n                {% if (item.icon) { %}\n                <img src=\"{%= item.icon %}\" class=\"ck-icon\"/>\n                {% } %}\n                {% if (item.author_url) { %}\n                <a href=\"{%= item.author_url %}\" class=\"ck-author ck-link\">{%= item.author %}</a>\n                {% } else if (item.author) { %}\n                <span class=\"ck-author\">{%= item.author %}</span>\n                {% } %}\n                {% if (item.subtitle) { %}\n                <span class=\"ck-subtitle\">{%= item.subtitle %}</span>\n                {% } %}\n            </p>\n            {% if (item.meta && item.meta.length) { %}\n            <span class=\"ck-meta\">{%= item.meta.join('</span><span class=\"ck-meta\">') %}</span>\n            {% } %}\n\n            {% } %}\n        </div>\n        {% }); %}\n\n    {% if (data.style === 'slide') { %}\n    </div></div>\n    <footer>\n        {% if (data.items.length > 1) { %}\n        <div class=\"ck-page\">\n        {% data.items.forEach(function(item, i){ %}\n            <span class=\"{%=(i === 0 && 'enable' || '')%}\"></span>\n        {% }); %}\n        </div>\n        {% } %}\n    </footer>\n    {% } %}\n\n</article>\n\n"}; 
+    return {"template":"\n{% function hd(){ %}\n    {% if (data.hd) { %}\n    <header class=\"ck-hd-wrap\">\n\n        <span class=\"ck-hd {%= (data.hd_url && 'clickable' || '') %}\">\n            {% if (data.hd_url) { %}\n            <a href=\"{%= data.hd_url %}\" class=\"ck-link ck-link-mask {%= (data.hd_url_extern ? 'ck-link-extern' : '') %}\"></a>\n            {% } %}\n            <span>{%= data.hd %}</span>\n        </span>\n\n        {% if (data.hd_opt) { %}\n        <div class=\"ck-hdopt-wrap\">{%=data.hd_opt%}</div>\n        {% } %}\n\n    </header>\n    {% } %}\n{% } %}\n\n{% if (data.hasSplitHd) { %}\n    {%= hd() %}\n{% } %}\n\n<article class=\"ck-unit-wrap\">\n\n    {% if (!data.hasSplitHd) { %}\n        {%= hd() %}\n    {% } %}\n\n    <div class=\"ck-list-wrap {%= (data.items.length > 1 ? 'slide' : '') %}\">\n    {% if (data.items.length) { %}\n\n        <div class=\"ck-list\">\n        {% data.items.forEach(function(item, i){ %}\n            <div class=\"ck-item {%= (item.href && 'clickable' || '') %}\">\n\n                <div class=\"ck-initem\">\n\n                    {% if (item.href) { %}\n                    <a href=\"{%= item.href %}\" class=\"ck-link ck-link-mask {%= (item.hrefExtern ? 'ck-link-extern' : '') %}\"></a>\n                    {% } %}\n\n                    <div class=\"ck-title-box\">\n\n                        {% if (item.icon) { %}\n                        <span class=\"ck-icon\">\n                            <img src=\"{%= item.icon %}\"/>\n                        </span>\n                        {% } %}\n\n                        <div class=\"ck-title-set\">\n\n                            {% if (item.title) { %}\n                            <div class=\"ck-title-line\">\n                                {%= item.titlePrefix.join('') %}\n\n                                {% if (item.hrefAlone) { %}\n                                <a href=\"{%= item.hrefAlone %}\" class=\"ck-link {%= (item.hrefExtern ? 'ck-link-extern' : '') %}\">{%= item.title %}</a>\n                                {% } else { %}\n                                <span class=\"ck-title\">{%= item.title %}</span>\n                                {% } %}\n\n                                {%= item.titleSuffix.join('') %}\n                                {%= item.titleTag.join('') %}\n                            </div>\n                            {% } %}\n\n                            {% if (item.info.length) { %}\n                            <div class=\"ck-info-wrap\">\n                                {%= item.info.join('') %}\n                            </div>\n                            {% } %}\n\n                            {% if (item.desc.length) { %}\n                            <div class=\"ck-desc-wrap\">\n                                {%= item.desc.join('') %}\n                            </div>\n                            {% } %}\n\n                        </div>\n\n                        {% if (item.content.length) { %}\n                        <div class=\"ck-content-wrap\">\n                            {%= item.content.join('') %}\n                        </div>\n                        {% } %}\n\n                        {% if (item.meta.length) { %}\n                        <div class=\"ck-meta-wrap\">\n                            {%= item.meta.join('') %}\n                        </div>\n                        {% } %}\n\n                    </div>\n\n                    {% if (item.author || item.authorDesc.length || item.authorMeta.length) { %}\n                    <div class=\"ck-author-box\">\n\n                        {% if (item.avatar) { %}\n                            {% if (item.authorUrl) { %}\n                            <a href=\"{%= item.authorUrl %}\" class=\"ck-avatar ck-link {%= (item.authorUrlExtern ? 'ck-link-extern' : '') %}\">\n                                <img src=\"{%= item.avatar %}\"/>\n                            </a>\n                            {% } else { %}\n                            <span class=\"ck-avatar\">\n                                <img src=\"{%= item.avatar %}\"/>\n                            </span>\n                            {% } %}\n                        {% } %}\n\n                        <div class=\"ck-author-set\">\n\n                            <div class=\"ck-author-line\">\n                                {%= item.authorPrefix.join('') %}\n                                {% if (item.authorUrl) { %}\n                                <a href=\"{%= item.authorUrl %}\" class=\"ck-author ck-link {%= (item.authorUrlExtern ? 'ck-link-extern' : '') %}\">{%= item.author %}</a>\n                                {% } else { %}\n                                <span class=\"ck-author\">{%= item.author %}</span>\n                                {% } %}\n                                {%= item.authorSuffix.join('') %}\n                            </div>\n\n                            {% if (item.authorInfo.length) { %}\n                            <div class=\"ck-author-info-wrap\">\n                                {%= item.authorInfo.join('') %}\n                            </div>\n                            {% } %}\n\n                            {% if (item.authorDesc.length) { %}\n                            <div class=\"ck-author-desc-wrap\">\n                                {%= item.authorDesc.join('') %}\n                            </div>\n                            {% } %}\n\n                        </div>\n\n                        {% if (item.authorMeta.length) { %}\n                        <div class=\"ck-author-meta-wrap\">\n                            {%= item.authorMeta.join('') %}\n                        </div>\n                        {% } %}\n\n\n                    </div>\n                    {% } %}\n\n                </div>\n\n            </div>\n        {% }); %}\n        </div>\n\n    {% } else { %}\n\n        <div class=\"ck-list\">\n            <div class=\"ck-item blank\">\n                <div class=\"ck-initem\">{%=(data.config.blank || '目前还没有内容')%}</div>\n            </div>\n        </div>\n\n    {% } %}\n    </div>\n\n    {% if (data.ft) { %}\n    <footer>{%= data.ft %}</footer>\n    {% } %}\n\n</article>\n\n"}; 
 
 });
 /* @source ../cardkit/tpl/unit/list.js */;
 
 define("../cardkit/tpl/unit/list", [], function(){
 
-    return {"template":"\n{% function get_item(item){ %}\n    {% if (item.href) { %}\n        <a href=\"{%= item.href %}\" class=\"ck-link ck-initem\">{% get_content(item); %}</a>\n    {% } else { %}\n        <p class=\"ck-initem\">{% get_content(item); %}</p>\n    {% } %}\n{% } %}\n\n{% function get_content(item){ %}\n\n    {% if (item.info) { %}\n    <span class=\"ck-info\">{%= item.info %}</span>\n    {% } %}\n\n    {% if (item.icon) { %}\n    <img src=\"{%= item.icon %}\" class=\"ck-icon\"/>\n    {% } %}\n\n    {% if (item.title) { %}\n    <span class=\"ck-title\">{%= item.title %}</span>\n    {% } %}\n\n    {% if (data.style === 'post' || data.style === 'grid') { %}\n        {% if (!item.href) { %}\n            {% if (item.author_url) { %}\n            <a href=\"{%= item.author_url %}\" class=\"ck-link\">{%= item.author %}</a>\n            {% } else if (item.author) { %}\n            <span class=\"ck-title\">{%= item.author %}</span>\n            {% } %}\n        {% } %}\n        {% if (item.subtitle) { %}\n        <span class=\"ck-subtitle\">{%= item.subtitle %}</span>\n        {% } %}\n    {% } %}\n\n{% } %}\n\n\n<article>\n\n    {% if (data.hd) { %}\n    <header>\n        {% if (data.hd_url) { %}\n        <a href=\"{%= data.hd_url %}\" class=\"ck-link\">{%= data.hd %}</a>\n        {% } else { %}\n        <span>{%= data.hd %}</span>\n        {% } %}\n        {% if (data.hd_opt) { %}\n        <div class=\"ck-hdopt\">{%=data.hd_opt%}</div>\n        {% } %}\n    </header>\n    {% } %}\n\n    {% if (data.items.length) { %}\n\n        {% if (data.style === 'more') { %}\n\n        <nav>\n        {% data.items.forEach(function(item){ %}\n            <div class=\"ck-item\">\n                {% get_item(item); %}\n            </div>\n        {% }); %}\n        </nav>\n\n        {% } else { %}\n\n        <ul>\n        {% data.items.forEach(function(item, i){ %}\n            {% if (i && (i % data.config.col === 0)) { %}\n                </ul><ul>\n            {% } %}\n            <li class=\"ck-item\" style=\"width:{%= (data.config.col ? Math.floor(1000/data.config.col)/10 + '%' : '') %};\">\n                {% get_item(item); %}\n                {% if (item.content) { %}\n                <span class=\"ck-content\">{%= item.content %}</span>\n                {% } %}\n                {% if (item.meta && item.meta.length) { %}\n                <span class=\"ck-meta\">{%= item.meta.join('</span><span class=\"ck-meta\">') %}</span>\n                {% } %}\n            </li>\n        {% }); %}\n        </ul>\n\n        {% } %}\n\n    {% } else { %}\n\n        <ul>\n            <li class=\"ck-item blank\">\n                <p class=\"ck-initem\">{%=(data.config.blank || '目前还没有内容')%}</p>\n            </li>\n        </ul>\n\n    {% } %}\n\n    {% if (data.ft) { %}\n    <footer>{%= data.ft %}</footer>\n    {% } %}\n\n</article>\n"}; 
+    return {"template":"\n{% function hd(){ %}\n    {% if (data.hd) { %}\n    <header class=\"ck-hd-wrap\">\n\n        <span class=\"ck-hd {%= (data.hd_url && 'clickable' || '') %}\">\n            {% if (data.hd_url) { %}\n            <a href=\"{%= data.hd_url %}\" class=\"ck-link ck-link-mask {%= (data.hd_url_extern ? 'ck-link-extern' : '') %}\"></a>\n            {% } %}\n            <span>{%= data.hd %}</span>\n        </span>\n\n        {% if (data.hd_opt) { %}\n        <div class=\"ck-hdopt-wrap\">{%=data.hd_opt%}</div>\n        {% } %}\n\n    </header>\n    {% } %}\n{% } %}\n\n{% if (data.hasSplitHd) { %}\n    {%= hd() %}\n{% } %}\n\n<article class=\"ck-unit-wrap\">\n\n    {% if (!data.hasSplitHd) { %}\n        {%= hd() %}\n    {% } %}\n\n    <div class=\"ck-list-wrap\">\n    {% if (data.items.length) { %}\n\n        <div class=\"ck-list\">\n        {% data.items.forEach(function(item, i){ %}\n            {% if (i && (i % data.config.col === 0)) { %}\n            </div><div class=\"ck-list\">\n            {% } %}\n            <div class=\"ck-item {%= (item.href && 'clickable' || '') %}\" \n                    style=\"width:{%= (data.config.col ? Math.floor(1000/data.config.col)/10 + '%' : '') %};\">\n\n                <div class=\"ck-initem\">\n\n                    {% if (item.href) { %}\n                    <a href=\"{%= item.href %}\" class=\"ck-link ck-link-mask {%= (item.hrefExtern ? 'ck-link-extern' : '') %}\"></a>\n                    {% } %}\n\n                    <div class=\"ck-title-box\">\n\n                        {% if (item.icon) { %}\n                            {% if (item.hrefAlone) { %}\n                            <a href=\"{%= item.hrefAlone %}\" class=\"ck-icon ck-link {%= (item.hrefExtern ? 'ck-link-extern' : '') %}\">\n                                <img src=\"{%= item.icon %}\"/>\n                            </a>\n                            {% } else { %}\n                            <span class=\"ck-icon\">\n                                <img src=\"{%= item.icon %}\"/>\n                            </span>\n                            {% } %}\n                        {% } %}\n\n                        <div class=\"ck-title-set\">\n\n                            {% if (item.title) { %}\n                            <div class=\"ck-title-line\">\n                                {%= item.titlePrefix.join('') %}\n\n                                {% if (item.hrefAlone) { %}\n                                <a href=\"{%= item.hrefAlone %}\" class=\"ck-link {%= (item.hrefExtern ? 'ck-link-extern' : '') %}\">{%= item.title %}</a>\n                                {% } else { %}\n                                <span class=\"ck-title\">{%= item.title %}</span>\n                                {% } %}\n\n                                {%= item.titleSuffix.join('') %}\n                                {%= item.titleTag.join('') %}\n                            </div>\n                            {% } %}\n\n                            {% if (item.info.length) { %}\n                            <div class=\"ck-info-wrap\">\n                                {%= item.info.join('') %}\n                            </div>\n                            {% } %}\n\n                            {% if (item.desc.length) { %}\n                            <div class=\"ck-desc-wrap\">\n                                {%= item.desc.join('') %}\n                            </div>\n                            {% } %}\n\n                        </div>\n\n                        {% if (item.content.length) { %}\n                        <div class=\"ck-content-wrap\">\n                            {%= item.content.join('') %}\n                        </div>\n                        {% } %}\n\n                        {% if (item.meta.length) { %}\n                        <div class=\"ck-meta-wrap\">\n                            {%= item.meta.join('') %}\n                        </div>\n                        {% } %}\n\n                    </div>\n\n                    {% if (item.author || item.authorDesc.length || item.authorMeta.length) { %}\n                    <div class=\"ck-author-box\">\n\n                        {% if (item.avatar) { %}\n                            {% if (item.authorUrl) { %}\n                            <a href=\"{%= item.authorUrl %}\" class=\"ck-avatar ck-link {%= (item.authorUrlExtern ? 'ck-link-extern' : '') %}\">\n                                <img src=\"{%= item.avatar %}\"/>\n                            </a>\n                            {% } else { %}\n                            <span class=\"ck-avatar\">\n                                <img src=\"{%= item.avatar %}\"/>\n                            </span>\n                            {% } %}\n                        {% } %}\n\n                        <div class=\"ck-author-set\">\n\n                            <div class=\"ck-author-line\">\n                                {%= item.authorPrefix.join('') %}\n                                {% if (item.authorUrl) { %}\n                                <a href=\"{%= item.authorUrl %}\" class=\"ck-author ck-link {%= (item.authorUrlExtern ? 'ck-link-extern' : '') %}\">{%= item.author %}</a>\n                                {% } else { %}\n                                <span class=\"ck-author\">{%= item.author %}</span>\n                                {% } %}\n                                {%= item.authorSuffix.join('') %}\n                            </div>\n\n                            {% if (item.authorInfo.length) { %}\n                            <div class=\"ck-author-info-wrap\">\n                                {%= item.authorInfo.join('') %}\n                            </div>\n                            {% } %}\n\n                            {% if (item.authorDesc.length) { %}\n                            <div class=\"ck-author-desc-wrap\">\n                                {%= item.authorDesc.join('') %}\n                            </div>\n                            {% } %}\n\n                        </div>\n\n                        {% if (item.authorMeta.length) { %}\n                        <div class=\"ck-author-meta-wrap\">\n                            {%= item.authorMeta.join('') %}\n                        </div>\n                        {% } %}\n\n\n                    </div>\n                    {% } %}\n\n                </div>\n\n            </div>\n        {% }); %}\n        </div>\n\n    {% } else { %}\n\n        <div class=\"ck-list\">\n            <div class=\"ck-item blank\">\n                <div class=\"ck-initem\">{%=(data.config.blank || '目前还没有内容')%}</div>\n            </div>\n        </div>\n\n    {% } %}\n    </div>\n\n    {% if (data.ft) { %}\n    <footer>{%= data.ft %}</footer>\n    {% } %}\n\n</article>\n"}; 
 
 });
 /* @source ../cardkit/tpl/unit/box.js */;
 
 define("../cardkit/tpl/unit/box", [], function(){
 
-    return {"template":"\n<article>\n\n    {% if (data.hd) { %}\n    <header>\n        {% if (data.hd_url) { %}\n        <a href=\"{%= data.hd_url %}\" class=\"ck-link\">{%= data.hd %}</a>\n        {% } else { %}\n        <span>{%= data.hd %}</span>\n        {% } %}\n        {% if (data.hd_opt) { %}\n        <div class=\"ck-hdopt\">{%=data.hd_opt%}</div>\n        {% } %}\n    </header>\n    {% } %}\n\n    {% if (data.hasContent) { %}\n    <section>{%= data.content %}</section>\n    {% } %}\n\n    {% if (data.ft) { %}\n    <footer>{%= data.ft %}</footer>\n    {% } %}\n\n</article>\n"}; 
+    return {"template":"\n{% function hd(){ %}\n    {% if (data.hd) { %}\n    <header class=\"ck-hd-wrap\">\n\n        <span class=\"ck-hd {%= (data.hd_url && 'clickable' || '') %}\">\n            {% if (data.hd_url) { %}\n            <a href=\"{%= data.hd_url %}\" class=\"ck-link ck-link-mask {%= (data.hd_url_extern ? 'ck-link-extern' : '') %}\"></a>\n            {% } %}\n            <span>{%= data.hd %}</span>\n        </span>\n\n        {% if (data.hd_opt) { %}\n        <div class=\"ck-hdopt-wrap\">{%=data.hd_opt%}</div>\n        {% } %}\n\n    </header>\n    {% } %}\n{% } %}\n\n{% if (data.config.plain || data.config.plainhd) { %}\n    {%= hd() %}\n{% } %}\n\n<article class=\"ck-unit-wrap\">\n\n    {% if (!data.config.plain && !data.config.plainhd) { %}\n        {%= hd() %}\n    {% } %}\n\n    {% if (data.hasContent) { %}\n    <section>{%= data.content %}</section>\n    {% } %}\n\n    {% if (data.ft) { %}\n    <footer>{%= data.ft %}</footer>\n    {% } %}\n\n</article>\n"}; 
 
 });
 /* @source mo/template/string.js */;
@@ -2887,7 +2897,9 @@ define("../cardkit/render", [
     boxParser, listParser, miniParser, formParser,
     supports){
 
-    var TPL_TIPS = '<div class="ck-top-tips">'
+    var SCRIPT_TAG = 'script[type="text/cardscript"]',
+
+        TPL_TIPS = '<div class="ck-top-tips">'
         + (supports.HIDE_TOPBAR ? '长按顶部导航条，可拖出浏览器地址栏' : '')
         + '</div>';
 
@@ -2900,6 +2912,10 @@ define("../cardkit/render", [
                     blank: card.data('cfgBlank')
                 };
 
+            if (!opt.isModal) {
+                card.find(SCRIPT_TAG + '[data-hook="source"]').forEach(run_script);
+            }
+
             var has_content = exports.initUnit(units, raw);
 
             if (!has_content && !opt.isModal && config.blank != 'false') {
@@ -2909,11 +2925,27 @@ define("../cardkit/render", [
             }
 
             if (!opt.isModal) {
+
                 card.append(footer.clone())
                     .prepend($('.ck-banner-unit', card))
                     .prepend(TPL_TIPS);
+
+                card.find(SCRIPT_TAG + '[data-hook="ready"]').forEach(run_script);
+
             }
 
+        },
+
+        openCard: function(card, opt){
+            if (!opt.isModal) {
+                card.find(SCRIPT_TAG + '[data-hook="open"]').forEach(run_script);
+            }
+        },
+
+        closeCard: function(card, opt){
+            if (!opt.isModal) {
+                card.find(SCRIPT_TAG + '[data-hook="close"]').forEach(run_script);
+            }
         },
 
         initUnit: function(units, raw){
@@ -2942,7 +2974,8 @@ define("../cardkit/render", [
         mini: function(unit, raw){
             var data = miniParser(unit, raw);
             data.items = data.items.filter(function(item){
-                if (!item.content || !item.content.length) {
+                if (!item.title && !item.author 
+                        && (!item.content || !item.content.length)) {
                     return false;
                 }
                 return true;
@@ -2952,10 +2985,8 @@ define("../cardkit/render", [
                 $(unit).remove();
                 return;
             }
-            if (!data.style) {
-                data.config.limit = 1;
-            }
-            if (data.config.limit) {
+            if (data.config.limit 
+                    && data.config.limit < data.items.length) {
                 data.items.length = data.config.limit;
             }
             unit.innerHTML = tpl.convertTpl(tpl_mini.template, data, 'data');
@@ -2979,7 +3010,8 @@ define("../cardkit/render", [
                 }
                 return true;
             }, data);
-            if (data.config.limit) {
+            if (data.config.limit 
+                    && data.config.limit < data.items.length) {
                 data.items.length = data.config.limit;
             }
             if (!data.items.length 
@@ -3003,6 +3035,10 @@ define("../cardkit/render", [
         }
     
     };
+
+    function run_script(script){
+        window["eval"].call(window, script.innerHTML);
+    }
 
     return exports;
 
@@ -3369,6 +3405,1850 @@ define("../cardkit/bus", [
 
 });
 
+/* @source moui/overlay.js */;
+
+define('moui/overlay', [
+  "mo/lang",
+  "dollar",
+  "eventmaster",
+  "mo/template/string"
+], function(_, $, event, tpl) {
+
+    var body = $('body'),
+
+        NS = 'mouiOverlay',
+        TPL_VIEW =
+           '<div id="{{id}}" class="{{cname}}">\
+                <header><h2></h2></header>\
+                <article></article>\
+            </div>',
+        LOADING_DOTS = '<span class="loading"><i>.</i><i>.</i><i>.</i></span>',
+        LOADING_DEFAULT = '加载中',
+
+        _mid = 0,
+
+        default_config = {
+            title: '',
+            content: '',
+            className: 'moui-overlay',
+            openDelay: 50,
+            closeDelay: 0,
+            event: {}
+        };
+
+    function Overlay(opt) {
+        this.init(opt);
+        this.set(this._config);
+    }
+
+    Overlay.prototype = {
+
+        _ns: NS,
+        _template: TPL_VIEW,
+        _defaults: default_config,
+
+        init: function(opt){
+            this.id = this._ns + (++_mid);
+            this.event = event();
+            this._config = _.config({}, opt, this._defaults);
+            body.append(tpl.format(this._template, { 
+                id: this.id,
+                cname: this._config.className
+            }));
+            this._node = $('#' + this.id);
+            this._header = this._node.find('header').eq(0);
+            this._title = this._header.find('h1');
+            this._content = this._node.find('article').eq(0);
+            return this;
+        },
+
+        set: function(opt) {
+            if (!opt) {
+                return this;
+            }
+            _.config(this._config, opt, this._defaults);
+
+            if (typeof opt.title === 'string') {
+                this.setTitle(opt.title);
+            }
+
+            if (opt.content !== undefined) {
+                this.setContent(opt.content);
+            }
+
+            if (opt.className !== undefined) {
+                this._node[0].className = opt.className;
+            }
+
+            return this;
+        },
+
+        setTitle: function(text){
+            this._title.html(text);
+            return this;
+        },
+
+        setContent: function(html){
+            this._content.html(html);
+            return this;
+        },
+
+        showLoading: function(text) {
+            this._node.addClass('loading');
+            this._title.html((text || LOADING_DEFAULT) + LOADING_DOTS);
+            return this;
+        },
+
+        hideLoading: function(){
+            this._node.removeClass('loading');
+            this._title.html(this._config.title);
+            return this;
+        },
+
+        open: function(){
+            clearTimeout(this._actimer);
+            if (this.isOpened) {
+                this.cancelClose();
+                return this;
+            }
+            var self = this,
+                args = arguments;
+            this.prepareOpen.apply(self, args);
+            this._actimer = setTimeout(function(){
+                self.applyOpen.apply(self, args);
+            }, this._config.openDelay);
+            return this;
+        },
+
+        close: function(){
+            clearTimeout(this._actimer);
+            if (!this.isOpened) {
+                this.cancelOpen();
+                return this;
+            }
+            var self = this,
+                args = arguments;
+            this.prepareClose.apply(self, args);
+            this._actimer = setTimeout(function(){
+                self.applyClose.apply(self, args);
+            }, this._config.closeDelay);
+            return this;
+        },
+
+        prepareOpen: function(){
+            this._node.appendTo(body).addClass('rendered');
+            this.event.fire('prepareOpen', [this]);
+        },
+
+        prepareClose: function(){
+            this.event.fire('prepareClose', [this]);
+            this._node.removeClass('active');
+        },
+
+        cancelOpen: function(){
+            this._node.removeClass('rendered');
+            this.event.fire('cancelOpen', [this]);
+        },
+
+        cancelClose: function(){
+            this._node.addClass('active');
+            this.event.fire('cancelClose', [this]);
+        },
+
+        applyOpen: function() {
+            this.isOpened = true;
+            this._node.addClass('active');
+            this.event.fire('open', [this]);
+        },
+
+        applyClose: function() {
+            this.isOpened = false;
+            this._content.empty();
+            this._node.removeClass('rendered');
+            this.event.fire('close', [this]);
+        },
+
+        destroy: function() {
+            this._node.remove();
+            this.event.fire('destroy', [this]);
+            return this;
+        }
+
+    };
+
+    function exports(opt) {
+        return new exports.Overlay(opt);
+    }
+
+    exports.Overlay = Overlay;
+
+    return exports;
+
+});
+
+/* @source moui/growl.js */;
+
+define('moui/growl', [
+  "dollar",
+  "mo/lang",
+  "mo/template",
+  "moui/overlay"
+], function($, _, tpl, overlay) {
+
+    var NS = 'mouiGrowl',
+        TPL_VIEW =
+           '<div id="{{id}}" class="moui-growl">\
+                <header><h2></h2></header>\
+                <article></article>\
+            </div>',
+        CORNER = 'corner-',
+
+        default_config = {
+            className: 'moui-growl',
+            closeDelay: 300,
+            corner: 'center',
+            expires: 1400,
+            keepalive: false
+        };
+
+    var Growl = _.construct(overlay.Overlay);
+
+    _.mix(Growl.prototype, {
+
+        _ns: NS,
+        _template: TPL_VIEW,
+        _defaults: _.merge({}, default_config, Growl.prototype._defaults),
+
+        set: function(opt) {
+            var self = this;
+            self.superClass.set.call(self, opt);
+
+            if (opt.corner && opt.corner !== self._currentCorner) {
+                if (self._currentCorner) {
+                    self._node.removeClass(CORNER + self._currentCorner);
+                }
+                self._node.addClass(CORNER + opt.corner);
+                self._currentCorner = opt.corner;
+            }
+
+            if (opt.expires !== undefined) {
+                clearTimeout(self._exptimer);
+                if (self.isOpened) {
+                    set_expires(self);
+                }
+            }
+
+            return self;
+        },
+
+        applyOpen: function(){
+            clearTimeout(this._exptimer);
+            if (this._config.expires != -1) {
+                set_expires(this);
+            }
+            return this.superClass.applyOpen.apply(this, arguments);
+        },
+
+        applyClose: function(){
+            this.isOpened = false;
+            this._node.removeClass('rendered');
+            this.event.fire('close', [this]);
+            if (!this._config.keepalive) {
+                this.destroy();
+            }
+        }
+
+    });
+
+    function set_expires(self){
+        self._exptimer = setTimeout(function(){
+            self.close();
+        }, self._config.expires);
+    }
+
+    function exports(opt){
+        return new exports.Growl(opt);
+    }
+
+    exports.Growl = Growl;
+
+    return exports;
+
+});
+
+/* @source ../cardkit/view/growl.js */;
+
+define("../cardkit/view/growl", [
+  "mo/lang",
+  "dollar",
+  "moui/growl"
+], function(_, $, growl) {
+
+    var UID = '_ckGrowlUid',
+    
+        uid = 0,
+        lib = {};
+
+    function exports(elm, opt){
+        var id;
+        if (elm.nodeName) {
+            elm = $(elm);
+            id = elm[0][UID];
+            if (id && lib[id]) {
+                lib[id].close();
+            }
+            id = elm[0][UID] = ++uid;
+            opt = _.mix({}, elm.data(), opt);
+        } else {
+            opt = elm || {};
+        }
+        opt.className = 'ck-growl';
+        var g = growl(opt);
+        if (id) {
+            lib[id] = g;
+        }
+        return g;
+    }
+
+    return exports;
+
+});
+
+/* @source moui/control.js */;
+
+
+define('moui/control', [
+  "mo/lang",
+  "dollar",
+  "eventmaster"
+], function(_, $, event){
+
+    var default_config = {
+            field: null,
+            label: null,
+            numField: null,
+            numStep: 1,
+            enableVal: 1,
+            disableVal: 0,
+            enableLabel: '',
+            disableLabel: '',
+            loadingLabel: '稍等...'
+        };
+
+    function Control(elm, opt){
+        this.init(elm, opt);
+        this.set(this._config);
+    }
+
+    Control.prototype = {
+
+        _defaults: default_config,
+
+        init: function(elm, opt){
+            this.event = event();
+            var node = this._node = $(elm);
+            if (node.hasClass('enabled')) {
+                this.isEnabled = true;
+            }
+            this._numField = [];
+            opt = _.mix({
+                field: node,
+                label: node
+            }, this.data(), opt);
+            this.setNodes(opt);
+            if (this._label[0]) {
+                this._isLabelClose = this._label.isEmpty();
+            }
+            if (this._numField[0]) {
+                this._isNumFieldClose = this._numField.isEmpty();
+            }
+            if (this.isEnabled) {
+                opt.enableVal = this.val();
+                opt.enableLabel = this.label();
+            } else {
+                opt.disableVal = this.val();
+                opt.disableLabel = this.label();
+            }
+            this._config = _.config({}, opt, this._defaults);
+        },
+
+        set: function(opt){
+            if (!opt) {
+                return this;
+            }
+            _.mix(this._config, opt);
+            this.setNodes(opt);
+            return this;
+        },
+
+        setNodes: function(opt){
+            if (opt.field !== undefined) {
+                if (opt.field) {
+                    this._field = $(opt.field, 
+                        typeof opt.field === 'string' && this._node);
+                } else {
+                    this._field = [];
+                }
+            }
+            if (opt.label !== undefined) {
+                if (opt.label) {
+                    this._label = $(opt.label, 
+                        typeof opt.label === 'string' && this._node);
+                } else {
+                    this._label = [];
+                }
+            }
+            if (opt.numField !== undefined) {
+                if (opt.numField) {
+                    this._numField = $(opt.numField, 
+                        typeof opt.numField === 'string' && this._node);
+                } else {
+                    this._numField = [];
+                }
+            }
+            return this;
+        },
+
+        val: function(v){
+            if (this._field[0]) {
+                if (this._field[0].nodeName === 'A') {
+                    return this._field.attr('href', v);
+                } else {
+                    return this._field.val(v);
+                }
+            }
+        },
+
+        label: function(str){
+            if (!this._label[0]) {
+                return;
+            }
+            if (this._isLabelClose) {
+                return this._label.val(str);
+            } else {
+                return this._label.html(str);
+            }
+        },
+
+        plus: function(n){
+            if (!this._numField[0]) {
+                return;
+            }
+            if (this._isNumFieldClose) {
+                return this._numField
+                    .val(parseFloat(this._numField.val()) + n);
+            } else {
+                return this._numField
+                    .html(parseFloat(this._numField.html()) + n);
+            }
+        },
+
+        data: function(){
+            return this._node.data();
+        },
+
+        showLoading: function(){
+            this._node.addClass('loading');
+            this.label(this._config.loadingLabel);
+            return this;
+        },
+
+        hideLoading: function(){
+            this._node.removeClass('loading');
+            return this;
+        },
+
+        toggle: function(){
+            if (this.isEnabled) {
+                this.disable();
+            } else {
+                this.enable();
+            }
+            return this;
+        },
+
+        enable: function(){
+            if (this.isEnabled) {
+                return this;
+            }
+            this.isEnabled = true;
+            this._node.addClass('enabled');
+            this.val(this._config.enableVal);
+            this.plus(this._config.numStep);
+            if (this._config.enableLabel) {
+                this.label(this._config.enableLabel);
+            }
+            this.event.reset('disable')
+                .resolve('enable', [this]);
+            return this;
+        },
+
+        disable: function(){
+            if (!this.isEnabled) {
+                return this;
+            }
+            this.isEnabled = false;
+            this._node.removeClass('enabled');
+            this.val(this._config.disbleVal);
+            this.plus(0 - this._config.numStep);
+            if (this._config.disableLabel) {
+                this.label(this._config.disableLabel);
+            }
+            this.event.reset('enable')
+                .resolve('disable', [this]);
+            return this;
+        }
+    
+    };
+
+    function exports(elm, opt){
+        return new exports.Control(elm, opt);
+    }
+
+    exports.Control = Control;
+
+    return exports;
+
+});
+
+
+/* @source moui/picker.js */;
+
+
+define('moui/picker', [
+  "mo/lang",
+  "dollar",
+  "eventmaster",
+  "moui/control"
+], function(_, $, event, control){
+
+    var OID = '_moPickerOid',
+
+        default_config = {
+            field: 'input[type="hidden"]',
+            options: '.option',
+            ignoreRepeat: false,
+            ignoreStatus: false,
+            multiselect: false
+        };
+
+    function Picker(elm, opt){
+        this.init(elm, opt);
+        this.set(this._config);
+    }
+
+    Picker.prototype = {
+
+        _defaults: default_config,
+
+        init: function(elm, opt){
+            this._uoid = 0;
+            this.event = event();
+            this._node = $(elm);
+            this._options = [];
+            opt = _.mix({}, this.data(), opt);
+            this._config = _.config({}, opt, this._defaults);
+            return this;
+        },
+
+        set: function(opt){
+            if (!opt) {
+                return this;
+            }
+            _.mix(this._config, opt);
+
+            if (opt.multiselect !== undefined) {
+                if (!opt.multiselect) {
+                    this._allSelected = null;
+                    this._lastSelected = null;
+                } else if (!this._allSelected) {
+                    this._allSelected = [];
+                }
+            }
+
+            if (opt.field !== undefined) {
+                if (opt.field) {
+                    this._field = $(opt.field, 
+                        typeof opt.field === 'string' && this._node);
+                } else {
+                    this._field = [];
+                }
+            }
+
+            if (opt.options) {
+                this._options.forEach(this.removeOption, this);
+                $(opt.options, this._node).forEach(this.addOption, this);
+            }
+
+            return this;
+        },
+
+        addOption: function(elm){
+            elm = $(elm)[0];
+            if (elm[OID]) {
+                return;
+            }
+            elm[OID] = ++this._uoid;
+            var controller = control(elm, {
+                enableVal: elm.value,
+                label: false
+            });
+            controller.event.bind('enable', when_enable.bind(this))
+                .bind('disable', when_disable.bind(this));
+            this._options.push(controller);
+            if (controller.isEnabled) {
+                change.call(this, 'enable', controller);
+            }
+            return this;
+        },
+
+        removeOption: function(elm){
+            var controller;
+            if (elm.constructor === control.Control) {
+                controller = elm;
+                elm = elm._node[0];
+            } else {
+                controller = this.getOption(elm);
+            }
+            this.unselect(elm);
+            if (controller) {
+                this._options.splice(
+                    this._options.indexOf(controller), 1);
+            }
+            return this;
+        },
+
+        getOption: function(elm){
+            if (typeof elm === 'number') {
+                elm = this._options[elm];
+            } else if (typeof elm === 'string') {
+                elm = this._options.filter(function(controller){
+                    return controller.val() === elm;
+                })[0];
+            } else {
+                var oid = $(elm)[0][OID];
+                if (!oid) {
+                    return null;
+                }
+                elm = this._options.filter(function(controller){
+                    return controller._node[0][OID] === oid;
+                })[0];
+            }
+            return elm;
+        },
+
+        val: function(){
+            if (!this._config) {
+                return;
+            }
+            if (this._config.multiselect) {
+                return this._allSelected.map(function(controller){
+                    return controller.val();
+                });
+            } else {
+                if (this._lastSelected) {
+                    return this._lastSelected.val();
+                }
+            }
+        },
+
+        data: function(){
+            return this._node.data();
+        },
+
+        showLoading: function(){
+            this._node.addClass('loading');
+            return this;
+        },
+
+        hideLoading: function(){
+            this._node.removeClass('loading');
+            return this;
+        },
+
+        undo: function(){
+            if (this._lastActionTarget) {
+                this._lastActionTarget.toggle();
+            }
+            return this;
+        },
+
+        selectAll: function(){
+            if (this._config.multiselect) {
+                this._options.forEach(function(controller){
+                    controller.enable();
+                });
+            }
+            this._lastActionTarget = null;
+            return this;
+        },
+
+        unselectAll: function(){
+            if (this._config.multiselect) {
+                this._options.forEach(function(controller){
+                    controller.disable();
+                });
+                this._lastActionTarget = null;
+            } else {
+                this.undo();
+            }
+            return this;
+        },
+
+        selectInvert: function(){
+            if (this._config.multiselect) {
+                this._options.forEach(function(controller){
+                    controller.toggle();
+                });
+            }
+            this._lastActionTarget = null;
+            return this;
+        },
+
+        select: function(i){
+            var controller = this.getOption(i);
+            if (controller) {
+                if (!this._config.multiselect && this._config.ignoreStatus) {
+                    change.call(this, 'enable', controller);
+                    this.event.fire('change', [this, controller]);
+                } else {
+                    if (this._config.multiselect 
+                            && this._allSelected.indexOf(controller) !== -1
+                            || !this._config.multiselect
+                            && this._lastSelected === controller) {
+                        if (!this._config.ignoreRepeat) {
+                            return this.unselect(i);
+                        }
+                    }
+                    this._lastActionTarget = controller.enable();
+                }
+            }
+            return this;
+        },
+
+        unselect: function(i){
+            if (!i) {
+                this.unselectAll();
+            } else {
+                var controller = this.getOption(i);
+                if (controller) {
+                    this._lastActionTarget = controller.disable();
+                }
+            }
+            return this;
+        }
+
+    };
+
+    function when_enable(controller){
+        change.call(this, 'enable', controller);
+        this.event.fire('change', [this, controller]);
+    }
+
+    function when_disable(controller){
+        change.call(this, 'disable', controller);
+        this.event.fire('change', [this, controller]);
+    }
+
+    function change(subject, controller){
+        if (subject === 'enable') {
+            if (this._config.multiselect) {
+                this._allSelected.push(controller);
+            } else {
+                var last = this._lastSelected;
+                this._lastSelected = controller;
+                if (last) {
+                    last.disable();
+                }
+            }
+        } else {
+            if (this._config.multiselect) {
+                var i = this._allSelected.indexOf(controller);
+                if (i !== -1) {
+                    this._allSelected.splice(i, 1);
+                }
+            } else {
+                if (controller 
+                        && this._lastSelected !== controller) {
+                    return;
+                }
+                this._lastSelected = null;
+            }
+        }
+        if (this._field[0]) {
+            this._field.val(this.val());
+        }
+    }
+
+    function exports(elm, opt){
+        return new exports.Picker(elm, opt);
+    }
+
+    exports.Picker = Picker;
+
+    return exports;
+
+});
+
+
+/* @source moui/actionview.js */;
+
+define('moui/actionview', [
+  "dollar",
+  "mo/lang",
+  "mo/template/string",
+  "moui/overlay",
+  "moui/picker"
+], function($, _, tpl, overlay, picker) {
+
+    var mix = _.mix,
+
+        NS = 'mouiActionView',
+        TPL_VIEW = 
+            '<div id="{{id}}" class="{{cname}}">\
+                <div class="shd"></div>\
+                <div class="wrapper">\
+                    <div class="content">\
+                        <header><h1></h1></header>\
+                        <div class="desc"></div>\
+                        <article></article>\
+                    </div>\
+                </div>\
+                <footer>\
+                    <input type="button" class="cancel">\
+                    <input type="button" class="confirm" data-is-default="true">\
+                </footer>\
+            </div>',
+
+        default_config = {
+            className: 'moui-actionview',
+            closeDelay: 500,
+            confirmText: '确认',
+            cancelText: '取消',
+            options: null,
+            multiselect: false
+        };
+
+    var ActionView = _.construct(overlay.Overlay);
+
+    mix(ActionView.prototype, {
+
+        _ns: NS,
+        _template: TPL_VIEW,
+        _defaults: _.merge({}, default_config, ActionView.prototype._defaults),
+
+        init: function(opt) {
+            this.superClass.init.call(this, opt);
+            this._wrapper = this._node.find('.wrapper').eq(0);
+            this._actionsWrapper = this._content;
+            this._wrapperContent = this._wrapper.find('.content').eq(0);
+            this._content = this._wrapper.find('.desc').eq(0);
+            this._footer = this._node.find('footer').eq(-1);
+            this._confirmBtn = this._footer.find('.confirm');
+            this._cancelBtn = this._footer.find('.cancel');
+            return this;
+        },
+
+        set: function(opt) {
+            if (!opt) {
+                return this;
+            }
+            this.superClass.set.call(this, opt);
+
+            if (opt.options !== undefined) {
+                this._actionsWrapper.empty();
+                var options = opt.options 
+                    ? $(opt.options).clone()
+                    : [];
+                if (options.length) {
+                    this._actionsWrapper.append(options);
+                    this._picker = picker(this._actionsWrapper, {
+                        options: options,
+                        multiselect: this._config.multiselect,
+                        ignoreStatus: !this._config.multiselect
+                    });
+                    this._node.removeClass('confirm-kind');
+                } else {
+                    this._node.addClass('confirm-kind');
+                }
+            }
+
+            if (opt.multiselect !== undefined) {
+                if (opt.multiselect) {
+                    this._footer.addClass('multi');
+                } else {
+                    this._footer.removeClass('multi');
+                }
+            }
+
+            if (opt.confirmText) {
+                this._confirmBtn.val(opt.confirmText);
+            }
+
+            if (opt.cancelText) {
+                this._cancelBtn.val(opt.cancelText);
+            }
+
+            return this;
+        },
+
+        val: function(){
+            if (this._picker) {
+                return this._picker.val();
+            }
+        },
+
+        confirm: function(){
+            this.event.fire('confirm', [this, this._picker]);
+            return this.ok();
+        },
+
+        cancel: function(){
+            this.event.fire('cancel', [this, this.picker]);
+            return this.ok();
+        },
+
+        ok: function(){
+            this.close();
+            return this.event.promise('close');
+        },
+
+        applyOpen: function(){
+            if (!this._config.multiselect && this._picker) {
+                var self = this;
+                this._picker.event.once('change', function(){
+                    self.confirm();
+                });
+            }
+            this.superClass.applyOpen.apply(this, arguments);
+        },
+
+        applyClose: function(){
+            if (!this._config.multiselect && this._picker) {
+                this._picker.event.reset();
+            }
+            this.superClass.applyClose.apply(this, arguments);
+        }
+
+    });
+
+    ActionView.prototype.done = ActionView.prototype.ok;
+
+    ['select', 'unselect', 'undo',
+        'selectAll', 'unselectAll', 'selectInvert'].forEach(function(method){
+        this[method] = function(){
+            return this._picker[method].apply(this._picker, arguments);
+        };
+    }, ActionView.prototype);
+
+    function exports(opt) {
+        return new exports.ActionView(opt);
+    }
+
+    exports.ActionView = ActionView;
+
+    return exports;
+
+});
+
+/* @source ../cardkit/view/actionview.js */;
+
+define("../cardkit/view/actionview", [
+  "mo/lang",
+  "dollar",
+  "moui/actionview",
+  "../cardkit/bus"
+], function(_, $, actionView, bus) {
+
+    var UID = '_ckActionViewUid',
+    
+        uid = 0,
+        lib = {};
+
+    function exports(elm, opt){
+        var id = elm;
+        if (typeof elm === 'object') {
+            elm = $(elm);
+            id = elm[0][UID];
+        } else {
+            elm = false;
+        }
+        if (id && lib[id]) {
+            return lib[id].set(opt);
+        }
+        if (elm) {
+            id = elm[0][UID] = ++uid;
+        }
+        opt = opt || {};
+        opt.className = 'ck-actionview';
+        var view = lib[id] = actionView(opt);
+        var eprops = {
+            component: view
+        };
+        view.event.bind('prepareOpen', function(view){
+            exports.current = view;
+            bus.fire('actionView:prepareOpen', [view]);
+        }).bind('cancelOpen', function(view){
+            exports.current = null;
+            bus.fire('actionView:cancelOpen', [view]);
+        }).bind('open', function(view){
+            bus.fire('actionView:open', [view]);
+            if (elm) {
+                elm.trigger('actionView:open', eprops);
+            }
+        }).bind('close', function(){
+            exports.current = null;
+            bus.unbind('actionView:confirmOnThis');
+            bus.fire('actionView:close', [view]);
+            if (elm) {
+                elm.trigger('actionView:close', eprops);
+            }
+        }).bind('cancel', function(){
+            if (elm) {
+                elm.trigger('actionView:cancel', eprops);
+            }
+        }).bind('confirm', function(view, picker){
+            bus.fire('actionView:confirmOnThis', [view]);
+            if (elm) {
+                elm.trigger('actionView:confirm', eprops);
+            }
+            if (picker && picker._lastSelected) {
+                var target = picker._lastSelected._node.attr('target');
+                if (target) {
+                    bus.fire('actionView:jump', [view, picker.val(), target]);
+                }
+            }
+        });
+        if (elm) {
+        }
+        return view;
+    }
+
+    return exports;
+
+});
+
+/* @source moui/modalview.js */;
+
+define('moui/modalview', [
+  "dollar",
+  "mo/lang",
+  "mo/template/string",
+  "moui/overlay"
+], function($, _, tpl, overlay) {
+
+    var mix = _.mix,
+
+        NS = 'mouiModalView',
+        TPL_VIEW =
+           '<div id="{{id}}" class="{{cname}}">\
+                <div class="shd"></div>\
+                <div class="wrapper">\
+                    <header>\
+                        <button type="button" class="confirm" data-is-default="true"></button>\
+                        <button type="button" class="cancel"></button>\
+                        <h1></h1>\
+                    </header>\
+                    <article><div class="content"></div></article>\
+                </div>\
+            </div>',
+
+        default_config = {
+            className: 'moui-modalview',
+            iframe: false,
+            hideConfirm: false,
+            confirmText: '确认',
+            cancelText: '取消'
+        };
+
+
+    var ModalView = _.construct(overlay.Overlay);
+
+    mix(ModalView.prototype, {
+
+        _ns: NS,
+        _template: TPL_VIEW,
+        _defaults: _.merge({}, default_config, ModalView.prototype._defaults),
+
+        init: function(opt) {
+            this.superClass.init.call(this, opt);
+            this._wrapper = this._node.find('.wrapper').eq(0);
+            this._contentWrapper = this._wrapper.find('article').eq(0);
+            this._content = this._contentWrapper.find('.content').eq(0);
+            this._confirmBtn = this._header.find('.confirm');
+            this._cancelBtn = this._header.find('.cancel');
+            return this;
+        },
+
+        set: function(opt) {
+            if (!opt) {
+                return this;
+            }
+            var self = this;
+            self.superClass.set.call(self, opt);
+
+            if (opt.content !== undefined) {
+                self._config.iframe = null;
+            } else if (opt.iframe) {
+                self._setIframeContent(opt);
+            } 
+            
+            if (opt.hideConfirm !== undefined) {
+                if (opt.hideConfirm) {
+                    this._confirmBtn.hide();
+                } else {
+                    this._confirmBtn.show();
+                }
+            }
+
+            if (opt.confirmText) {
+                this._confirmBtn.html(opt.confirmText);
+            }
+
+            if (opt.cancelText) {
+                this._cancelBtn.html(opt.cancelText);
+            }
+
+            return self;
+        },
+
+        setContent: function(html){
+            this.superClass.setContent.call(this, html);
+            if (html) {
+                this.event.fire('contentchange', [this]);
+            }
+            return this;
+        },
+
+        _setIframeContent: function(){
+            var self = this;
+            this._clearIframeContent();
+            self.setContent('');
+            self.showLoading();
+            self._iframeContent = $('<iframe class="moui-modalview-iframebd" '
+                    + 'frameborder="0" scrolling="no" style="visibility:hidden;width:100%;">'
+                    + '</iframe>')
+                .bind('load', function(){
+                    try {
+                        if (!this.contentWindow.document.body.innerHTML) {
+                            return;
+                        }
+                        self._iframeWindow = $(this.contentWindow);
+                        if (!self._iframeContent
+                            && self._iframeWindow[0].location.href !== self._config.iframe) {
+                            return;
+                        }
+                        self._iframeContent[0].style.visibility = '';
+                        self.event.resolve("frameOnload", [self]);
+                        self.hideLoading();
+                    } catch(ex) {}
+                }).appendTo(self._content);
+        },
+
+        _clearIframeContent: function(){
+            if (this._iframeContent) {
+                this._iframeContent.remove();
+                this._iframeContent = null;
+            }
+            this.event.reset("frameOnload");
+        },
+
+        confirm: function(){
+            this.event.fire('confirm', [this]);
+            return this;
+        },
+
+        cancel: function(){
+            this.event.fire('cancel', [this]);
+            this.ok();
+            return this;
+        },
+
+        ok: function(){
+            this.close();
+            return this.event.promise('close');
+        },
+
+        applyOpen: function(){
+            this.superClass.applyOpen.apply(this, arguments);
+            if (this._config.iframe) {
+                this._iframeContent.attr('src', this._config.iframe);
+            }
+        },
+
+        applyClose: function(){
+            this._clearIframeContent();
+            this._contentWrapper[0].scrollTop = 0;
+            this.superClass.applyClose.apply(this, arguments);
+        }
+
+    });
+
+    ModalView.prototype.done = ModalView.prototype.ok;
+
+    function exports(opt) {
+        return new exports.ModalView(opt);
+    }
+
+    exports.ModalView = ModalView;
+
+    return exports;
+
+});
+
+/* @source mo/network/ajax.js */;
+
+/**
+ * using AMD (Asynchronous Module Definition) API with OzJS
+ * see http://ozjs.org for details
+ *
+ * Copyright (C) 2010-2012, Dexter.Yy, MIT License
+ * vim: et:ts=4:sw=4:sts=4
+ */
+define("mo/network/ajax", [
+  "mo/browsers"
+], function(browsers, require, exports){
+
+    var httpParam = function(a) {
+        var s = [];
+        if (a.constructor == Array) {
+            for (var i = 0; i < a.length; i++)
+                s.push(a[i].name + "=" + encodeURIComponent(a[i].value));
+        } else {
+            for (var j in a)
+                s.push(j + "=" + encodeURIComponent(a[j]));
+        }
+        return s.join("&").replace(/%20/g, "+");
+    };
+
+    /**
+     * From jquery by John Resig
+     */ 
+    var ajax = function(s){
+        var options = {
+            type: s.type || "GET",
+            url: s.url || "",
+            data: s.data || null,
+            dataType: s.dataType,
+            contentType: s.contentType === false? false : (s.contentType || "application/x-www-form-urlencoded"),
+            username: s.username || null,
+            password: s.password || null,
+            timeout: s.timeout || 0,
+            processData: s.processData === undefined ? true : s.processData,
+            beforeSend: s.beforeSend || function(){},
+            complete: s.complete || function(){},
+            handleError: s.handleError || function(){},
+            success: s.success || function(){},
+            accepts: {
+                xml: "application/xml, text/xml",
+                html: "text/html",
+                script: "text/javascript, application/javascript",
+                json: "application/json, text/javascript",
+                text: "text/plain",
+                _default: "*/*"
+            }
+        };
+        
+        if ( options.data && options.processData && typeof options.data != "string" )
+            options.data = httpParam(options.data);
+        if ( options.data && options.type.toLowerCase() == "get" ) {
+            options.url += (options.url.match(/\?/) ? "&" : "?") + options.data;
+            options.data = null;
+        }
+        
+        var status, data, requestDone = false, xhr = window.ActiveXObject ? new ActiveXObject("Microsoft.XMLHTTP") : new XMLHttpRequest();
+        xhr.open( options.type, options.url, true, options.username, options.password );
+        try {
+            if ( options.data && options.contentType !== false )
+                xhr.setRequestHeader("Content-Type", options.contentType);
+            xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+            xhr.setRequestHeader("Accept", s.dataType && options.accepts[ s.dataType ] ?
+                options.accepts[ s.dataType ] + ", */*" :
+                options.accepts._default );
+        } catch(e){}
+        
+        if ( options.beforeSend )
+            options.beforeSend(xhr);
+            
+        var onreadystatechange = function(isTimeout){
+            if ( !requestDone && xhr && (xhr.readyState == 4 || isTimeout == "timeout") ) {
+                requestDone = true;
+                if (ival) {
+                    clearInterval(ival);
+                    ival = null;
+                }
+
+                status = isTimeout == "timeout" && "timeout" || !httpSuccess( xhr ) && "error" || "success";
+
+                if ( status == "success" ) {
+                    try {
+                        data = httpData( xhr, options.dataType );
+                    } catch(e) {
+                        status = "parsererror";
+                    }
+                    
+                    options.success( data, status );
+                } else
+                    options.handleError( xhr, status );
+                options.complete( xhr, status );
+                xhr = null;
+            }
+        };
+
+        var ival = setInterval(onreadystatechange, 13); 
+        if ( options.timeout > 0 )
+            setTimeout(function(){
+                if ( xhr ) {
+                    xhr.abort();
+                    if( !requestDone )
+                        onreadystatechange( "timeout" );
+                }
+            }, options.timeout);    
+            
+        xhr.send(options.data);
+
+        function httpSuccess(r) {
+            try {
+                return !r.status && location.protocol == "file:" || ( r.status >= 200 && r.status < 300 ) || r.status == 304 || r.status == 1223 || browsers.safari && !r.status;
+            } catch(e){}
+            return false;
+        }
+        function httpData(r,type) {
+            var ct = r.getResponseHeader("content-type");
+            var xml = type == "xml" || !type && ct && ct.indexOf("xml") >= 0;
+            var data = xml ? r.responseXML : r.responseText;
+            if ( xml && data.documentElement.tagName == "parsererror" )
+                throw "parsererror";
+            if ( type == "script" )
+                eval.call( window, data );
+            if ( type == "json" )
+                data = eval("(" + data + ")");
+            return data;
+        }
+        return xhr;
+    };
+
+    exports.ajax = ajax;
+    exports.params = httpParam;
+
+});
+
+/* @source mo/network.js */;
+
+/**
+ * Standalone jQuery.ajax API and enhanced getJSON, and so on
+ *
+ * using AMD (Asynchronous Module Definition) API with OzJS
+ * see http://ozjs.org for details
+ *
+ * Copyright (C) 2010-2012, Dexter.Yy, MIT License
+ * vim: et:ts=4:sw=4:sts=4
+ */
+define("mo/network", [
+  "mo/lang",
+  "mo/network/ajax"
+], function(_, net, require, exports){
+
+    var window = this,
+        uuid4jsonp = 1;
+
+    _.mix(exports, net);
+
+    exports.getScript = function(url, op){
+        var doc = _.isWindow(this) ? this.document : document,
+            s = doc.createElement("script");
+        s.type = "text/javascript";
+        s.async = "async"; //for firefox3.6
+        if (!op)
+            op = {};
+        else if (_.isFunction(op))
+            op = { callback: op };
+        if (op.charset)
+            s.charset = op.charset;
+        s.src = url;
+        var h = doc.getElementsByTagName("head")[0];
+        s.onload = s.onreadystatechange = function(__, isAbort){
+            if ( isAbort || !s.readyState || /loaded|complete/.test(s.readyState) ) {
+                s.onload = s.onreadystatechange = null;
+                if (h && s.parentNode) {
+                    h.removeChild(s);
+                }
+                s = undefined;
+                if (!isAbort && op.callback) {
+                    op.callback();
+                }
+            }
+        };
+        h.insertBefore(s, h.firstChild);
+    };
+
+    exports.getStyle = function(url){
+        var doc = this.document || document,
+            s = doc.createElement("link");
+        s.setAttribute('type', 'text/css');
+        s.setAttribute('rel', 'stylesheet');
+        s.setAttribute('href', url);
+        var h = doc.getElementsByTagName("head")[0];
+        h.appendChild(s);
+    };
+
+    var RE_DOMAIN = /https?\:\/\/(.+?)\//;
+    exports.getJSON = function(url, data, fn, op){
+        var domain = url.match(RE_DOMAIN);
+        if (!data || _.isFunction(data)) {
+            op = fn;
+            fn = data;
+            data = {};
+        }
+        if (fn) {
+            if ((!op || !op.isScript) && (!domain || domain[1] === window.location.host)) {
+                exports.ajax({
+                    url: url,
+                    data: data,
+                    success: fn,
+                    error: op && op.error,
+                    dataType: "json"
+                });
+                return true;
+            }
+        }
+        op = _.mix({
+            charset: "utf-8",
+            callback: "__oz_jsonp" + (++uuid4jsonp)
+        }, op || {});
+        if (op.random) {
+            data[op.random] = +new Date();
+        }
+        var cbName = op.callbackName || 'jsoncallback';
+        data[cbName] = op.callback;
+        url = [url, /\?/.test(url) ? "&" : "?", exports.httpParam(data)].join("");
+        if (fn) {
+            _.ns(op.callback, fn);
+        }
+        delete op.callback;
+        exports.getScript(url, op);
+    };
+
+    exports.getRequest = function(url, params){
+        var img = new Image();
+        img.onload = function(){ img = null; }; //阻止IE下的自动垃圾回收引起的请求未发出状况
+        img.src = !params ? url : [url, /\?/.test(url) ? "&" : "?", typeof params == "string" ? params : exports.httpParam(params)].join('');
+    };
+
+    exports.parseJSON = function(json){
+        json = json
+            .replace(/^[\w(<\/*!\s]*?\{/, '{')
+            .replace(/[^\}]*$/, '');
+        try {
+            json = window.JSON ? window.JSON.parse(json) : eval(json);
+        } catch(ex) {
+            json = false;
+        }
+        return json;
+    };
+
+});
+
+/* @source ../cardkit/view/modalcard.js */;
+
+define("../cardkit/view/modalcard", [
+  "dollar",
+  "mo/network",
+  "moui/modalview",
+  "../cardkit/supports"
+], function($, net, modal, supports) {
+
+    var modalCard = modal({
+            className: 'ck-modalview',
+            closeDelay: 400
+        }),
+        origin_set = modalCard.set;
+
+    modalCard.set = function(opt){
+        if (!opt) {
+            return this;
+        }
+        var self = this,
+            url = opt.jsonUrl || opt.url;
+        if (url) {
+            opt.content = '';
+            self.showLoading();
+            net.ajax({
+                url: url,
+                dataType: opt.jsonUrl ? 'json' : 'text',
+                success: function(data){
+                    if (opt.jsonUrl) {
+                        data = data.html;
+                    }
+                    self.setContent(data);
+                    self.hideLoading();
+                }
+            });
+        }
+
+        if (opt.iframeUrl) {
+            opt.iframe = opt.iframeUrl;
+        }
+
+        if (opt.source) {
+            opt.content = $('.' + opt.source).map(function(elm){
+                var type = $(elm).attr('type');
+                if (type === 'text/cardscript' || type === 'text/jscode') {
+                    return '<script>' + elm.innerHTML + '</script>';
+                } else {
+                    return elm.innerHTML;
+                }
+            }).join('');
+        }
+
+        return origin_set.call(this, opt);
+    };
+    
+    if (supports.UNIVERSAL_TRANS) {
+        modalCard.ok = modalCard.done = function(){
+            if (!history.state) {
+                history.go(-2);
+            } else {
+                history.back();
+            }
+            return this.event.promise('close');
+        };
+    } else {
+        modalCard.ok = modalCard.done = function(){
+            this.event.fire('needclose');
+            return this.event.promise('close');
+        };
+    }
+
+    modalCard.event.bind('confirm', function(modal){
+        modal.event.fire('confirmOnThis', arguments);
+    }).bind('close', function(modal){
+        modal.event.unbind('confirmOnThis');
+    });
+
+    return modalCard;
+
+});
+
+/* @source moui/slider.js */;
+
+define('moui/slider', [
+  "mo/lang",
+  "dollar",
+  "eventmaster"
+], function(_, $, event) {
+    function Slider(elm, opt) {
+        this.init(elm, opt);
+    }
+
+    Slider.prototype = {
+        init: function(elm) {
+            var node = this._node = $(elm),
+                field;
+
+            this.event = event();
+
+            if (node.data('init')) {
+                return;
+            } else {
+                node.data('init', true);
+            }
+
+            this._field = field = node.find('.slider-field');
+            this._hoverArea = node.find('.slider-hover');
+            this._selectedArea = node.find('.slider-selected');
+
+            this._step = field.attr('step'),
+            this._max = field.attr('max'),
+            this._min = field.attr('min');
+
+            this._stepWidth = this._step * node.width() / (this._max - this._min);
+        },
+
+        calc: function(event) {
+            var pageX = (event.changedTouches) ? event.changedTouches[0].pageX : event.pageX,
+                node = this._node,
+                stepWidth = this._stepWidth,
+                step = this._step,
+                offsetX = pageX - node.offset().left;
+
+            if (offsetX > node.width()) {
+                offsetX = node.width();
+            } else if (offsetX < 0) {
+                offsetX = 0;
+            }
+
+            return Math.ceil(offsetX / stepWidth) * step;
+        },
+
+        val: function(v) {
+            if (this._field[0]) {
+                var returnValue = this._field.val(v);
+                if (v !== undefined) {
+                    this.event.fire('change');
+                }
+                return returnValue;
+            }
+        },
+
+        show: function(v) {
+            var stepWidth = this._stepWidth,
+                selectedArea = this._selectedArea,
+                hoverArea = this._hoverArea;
+
+            hoverArea.hide();
+            selectedArea.css({width:v * stepWidth})
+                .show();
+        },
+
+        pretend: function(v) {
+            var stepWidth = this._stepWidth,
+                selectedArea = this._selectedArea,
+                hoverArea = this._hoverArea;
+
+            var width = v * stepWidth;
+
+            if (hoverArea.data('width') != width) {
+                selectedArea.hide();
+                hoverArea.css({width: width})
+                    .show()
+                    .data('width', width);
+            }
+        }
+    };
+
+    function exports(elm, opt){
+        return new exports.Slider(elm, opt);
+    }
+
+    exports.Slider = Slider;
+
+    return exports;
+
+});
+
+/* @source ../cardkit/view/stars.js */;
+
+define("../cardkit/view/stars", [
+  "mo/lang",
+  "dollar",
+  "mo/network",
+  "moui/slider"
+], function(_, $, net, slider) {
+    var UID = '_ckStarsUid',
+        uid = 0,
+        lib = {};
+
+    function exports(elm) {
+        elm = $(elm);
+        var id = elm[0][UID];
+        if (id && lib[id]) {
+            return lib[id];
+        }
+        id = elm[0][UID] = ++uid;
+        var s = lib[id] = slider(elm);
+
+        s.event.bind('change', function() {
+            var value = s.val();
+            s.show(value);
+        });
+
+        return s;
+    }
+
+    exports.gc = function(check) {
+        for (var i in lib) {
+            if (check(lib[i])) {
+                delete lib[i];
+            }
+        }
+    };
+
+    return exports;
+});
+
+/* @source ../cardkit/view/picker.js */;
+
+define("../cardkit/view/picker", [
+  "mo/lang",
+  "dollar",
+  "mo/network",
+  "moui/picker"
+], function(_, $, net, picker) {
+
+    var UID = '_ckPickerUid',
+    
+        uid = 0,
+        lib = {};
+
+    function request(cfg, fn){
+        var url = cfg.jsonUrl || cfg.url;
+        if (url) {
+            net.ajax({
+                url: url,
+                type: cfg.method || 'post',
+                dataType: cfg.jsonUrl ? 'json' : 'text',
+                success: fn
+            });
+        } else {
+            fn(false);
+        }
+    }
+
+    function exports(elm, opt){
+        elm = $(elm);
+        var id = elm[0][UID];
+        if (id && lib[id]) {
+            return lib[id].set(opt);
+        }
+        id = elm[0][UID] = ++uid;
+        opt = _.mix({
+            options: '.ck-option'
+        }, opt || {});
+        var p = lib[id] = picker(elm, opt);
+
+        p.event.bind('change', function(p, controller){
+            var cfg = controller.data(), 
+                eprops = {
+                    component: p 
+                },
+                req_opt;
+            p.showLoading();
+            if (controller.isEnabled) {
+                req_opt = {
+                    method: cfg.requestMethod,
+                    url: cfg.enableUrl,
+                    jsonUrl: cfg.enableJsonUrl
+                };
+            } else {
+                req_opt = {
+                    method: cfg.requestMethod,
+                    url: cfg.disableUrl,
+                    jsonUrl: cfg.disableJsonUrl
+                };
+            }
+            request(req_opt, function(data){
+                p.hideLoading();
+                if (data !== false) {
+                    p.responseData = data;
+                    elm.trigger('picker:response', eprops);
+                }
+            });
+            elm.trigger('picker:change', eprops);
+        });
+
+        return p;
+    }
+
+    exports.gc = function(check){
+        for (var i in lib) {
+            if (check(lib[i])) {
+                delete lib[i];
+            }
+        }
+    };
+
+    return exports;
+
+});
+
+/* @source ../cardkit/view/control.js */;
+
+define("../cardkit/view/control", [
+  "mo/lang",
+  "dollar",
+  "mo/network",
+  "moui/control"
+], function(_, $, net, control) {
+
+    var UID = '_ckControlUid',
+    
+        uid = 0,
+        lib = {};
+
+    var CkControl = _.construct(control.Control);
+
+    _.mix(CkControl.prototype, {
+
+        enable: function(){
+            var cfg = this.data();
+            return this.request({
+                method: cfg.requestMethod,
+                url: cfg.enableUrl,
+                jsonUrl: cfg.enableJsonUrl
+            }, function(){
+                this.superClass.enable.call(this);
+            });
+        },
+
+        disable: function(){
+            var cfg = this.data();
+            return this.request({
+                method: cfg.requestMethod,
+                url: cfg.disableUrl,
+                jsonUrl: cfg.disableJsonUrl
+            }, function(){
+                this.superClass.disable.call(this);
+            });
+        },
+
+        request: function(cfg, fn){
+            var self = this,
+                url = cfg.jsonUrl || cfg.url;
+            if (url) {
+                self.showLoading();
+                net.ajax({
+                    url: url,
+                    type: cfg.method || 'post',
+                    dataType: cfg.jsonUrl ? 'json' : 'text',
+                    success: function(data){
+                        self.hideLoading();
+                        self.responseData = data;
+                        fn.call(self);
+                    }
+                });
+            } else {
+                fn.call(self);
+            }
+            return this;
+        }
+    
+    });
+
+    function exports(elm, opt){
+        elm = $(elm);
+        var id = elm[0][UID];
+        if (id && lib[id]) {
+            return lib[id].set(opt);
+        }
+        id = elm[0][UID] = ++uid;
+        var controller = lib[id] = new exports.Control(elm, opt);
+        controller.event.bind('enable', function(controller){
+            elm.trigger('control:enable', {
+                component: controller
+            });
+        }).bind('disable', function(controller){
+            elm.trigger('control:disable', {
+                component: controller
+            });
+        });
+        return controller;
+    }
+
+    exports.Control = CkControl;
+
+    exports.gc = function(check){
+        for (var i in lib) {
+            if (check(lib[i])) {
+                delete lib[i];
+            }
+        }
+    };
+
+    return exports;
+
+});
+
 /* @source momo/base.js */;
 
 
@@ -3454,10 +5334,11 @@ define('momo/base', [
 
         once: function(ev, handler, node){
             var self = this;
-            this.bind(ev, function fn(){
+            this.bind(ev, fn, node);
+            function fn(){
                 self.unbind(ev, fn, node);
                 handler.apply(this, arguments);
-            }, node);
+            }
         },
 
         // implement
@@ -3487,6 +5368,157 @@ define('momo/base', [
     }
 
     exports.Class = MomoBase;
+
+    return exports;
+
+});
+
+/* @source momo/scroll.js */;
+
+
+define('momo/scroll', [
+  "mo/lang",
+  "momo/base"
+], function(_, momoBase){
+
+    var MomoScroll = _.construct(momoBase.Class);
+
+    _.mix(MomoScroll.prototype, {
+
+        EVENTS: [
+            'scrolldown', 
+            'scrollup', 
+            'scrollstart', 
+            'scrollend'
+        ],
+        DEFAULT_CONFIG: {
+            'directThreshold': 5,
+            'scrollEndGap': 5
+        },
+
+        watchScroll: function(elm){
+            this.scrollingNode = elm;
+        },
+
+        checkScollDirection: function(y){
+            var node = { target: this.node },
+                d = y - this._lastY,
+                threshold = this._config.directThreshold;
+            if (d < 0 - threshold) {
+                if (this._scrollDown !== true) {
+                    this.trigger(node, this.event.scrolldown);
+                }
+                this._lastY = y;
+                this._scrollDown = true;
+            } else if (d > threshold) {
+                if (this._scrollDown !== false) {
+                    this.trigger(node, this.event.scrollup);
+                }
+                this._lastY = y;
+                this._scrollDown = false;
+            }
+        },
+
+        press: function(e){
+            var self = this,
+                t = this.SUPPORT_TOUCH ? e.touches[0] : e;
+            self._scrollDown = null;
+            self._lastY = t.clientY;
+            self._scrollY = null;
+            self._ended = false;
+            if (self.scrollingNode) {
+                var scrolling = self._scrolling;
+                self._scrolling = false;
+                var tm = self._tm = e.timeStamp;
+                self.once(self.MOVE, function(){
+                    self.once('scroll', function(){
+                        if (tm === self._tm) {
+                            if (!scrolling) {
+                                self._started = true;
+                                self.trigger({ target: self.node }, self.event.scrollstart);
+                                if (self._ended) {
+                                    self._ended = false;
+                                    self.trigger({ target: self.node }, self.event.scrollend);
+                                }
+                            }
+                        }
+                    }, self.scrollingNode);
+                });
+            }
+        },
+
+        move: function(e){
+            var t = this.SUPPORT_TOUCH ? e.touches[0] : e;
+            this.checkScollDirection(t.clientY);
+            //this._lastY = t.clientY;
+            if (this.scrollingNode) {
+                this._scrollY = this.scrollingNode.scrollTop;
+            }
+        },
+
+        release: function(e){
+            var self = this, 
+                t = this.SUPPORT_TOUCH ? e.changedTouches[0] : e,
+                node = { target: self.node };
+            // up/down
+            this.checkScollDirection(t.clientY);
+            // end
+            if (self._scrollY !== null) {
+                var vp = self.scrollingNode,
+                    gap = Math.abs(vp.scrollTop - self._scrollY) || 0;
+                if (self._scrollY >= 0 && (self._scrollY <= vp.scrollHeight + vp.offsetHeight)
+                        && gap < self._config.scrollEndGap) {
+                    if (self._started) {
+                        self.trigger(node, self.event.scrollend);
+                        self._started = false;
+                    } else {
+                        self._ended = true;
+                    }
+                } else {
+                    var tm = self._tm;
+                    self._scrolling = true;
+                    self.once('scroll', function(){
+                        if (tm === self._tm) {
+                            self._scrolling = false;
+                            self._started = false;
+                            self.trigger(node, self.event.scrollend);
+                        }
+                    }, vp);
+                }
+                self._scrollY = null;
+            } else if (self._started) {
+                self._started = false;
+                self.trigger(node, self.event.scrollend);
+            }
+        }
+    
+    });
+
+    function exports(elm, opt, cb){
+        return new exports.Class(elm, opt, cb);
+    }
+
+    exports.Class = MomoScroll;
+
+    return exports;
+
+});
+
+/* @source momo/drag.js */;
+
+
+define('momo/drag', [
+  "mo/lang",
+  "momo/base"
+], function(_, momoBase){
+
+    var MomoDrag = _.construct(momoBase.Class);
+
+    function exports(elm, opt, cb){
+        return new exports.Class(elm, opt, cb);
+    }
+
+    exports.Class = MomoDrag;
 
     return exports;
 
@@ -3586,6 +5618,115 @@ define('momo/swipe', [
     }
 
     exports.Class = MomoSwipe;
+
+    return exports;
+
+});
+
+/* @source momo/tap.js */;
+
+
+define('momo/tap', [
+  "mo/lang",
+  "momo/base"
+], function(_, momoBase){
+
+    var MomoTap = _.construct(momoBase.Class);
+
+    _.mix(MomoTap.prototype, {
+
+        EVENTS: ['tap', 'doubletap', 'hold', 'tapstart', 'tapcancel'],
+        DEFAULT_CONFIG: {
+            'tapRadius': 10,
+            'doubleTimeout': 300,
+            'tapThreshold': 0,
+            'holdThreshold': 500
+        },
+
+        press: function(e){
+            var self = this,
+                t = self.SUPPORT_TOUCH ? e.touches[0] : e;
+            self._startTime = e.timeStamp;
+            self._startTarget = t.target;
+            self._startPosX = t.clientX;
+            self._startPosY = t.clientY;
+            self._movePosX = self._movePosY = self._moveTarget = NaN;
+            self._started = false;
+            self._pressTrigger = function(){
+                self._started = true;
+                self.trigger(e, self.event.tapstart);
+                self._pressTrigger = nothing;
+            };
+            self._activeTimer = setTimeout(function(){
+                if (!is_moved(self)) {
+                    self._pressTrigger();
+                }
+            }, self._config.tapThreshold);
+        },
+
+        move: function(e){
+            var t = this.SUPPORT_TOUCH ? e.touches[0] : e;
+            this._moveTarget = t.target;
+            this._movePosX = t.clientX;
+            this._movePosY = t.clientY;
+        },
+
+        release: function(e){
+            var self = this,
+                tm = e.timeStamp,
+                moved = is_moved(self);
+            clearTimeout(self._activeTimer);
+            if (moved || tm - self._startTime < self._config.tapThreshold) {
+                if (!moved) {
+                    self._firstTap = tm;
+                }
+                if (self._started) {
+                    self.trigger(e, self.event.tapcancel);
+                }
+                return;
+            }
+            if (!self._started) {
+                self._pressTrigger();
+            }
+            if (tm - self._startTime > self._config.holdThreshold + self._config.tapThreshold) {
+                self.trigger(e, self.event.hold);
+            } else {
+                if (self._firstTap
+                        && (tm - self._firstTap < self._config.doubleTimeout)) {
+                    e.preventDefault();
+                    self.trigger(e, self.event.doubletap);
+                    self._firstTap = 0;
+                } else {
+                    self.trigger(e, self.event.tap);
+                    self._firstTap = tm;
+                }
+            }
+        },
+
+        cancel: function(e){
+            clearTimeout(this._activeTimer);
+            if (this._started) {
+                this.trigger(e, this.event.tapcancel);
+            }
+        }
+    
+    });
+
+    function is_moved(self){
+        if (self._moveTarget && self._moveTarget !== self._startTarget 
+                || Math.abs(self._movePosX - self._startPosX) > self._config.tapRadius
+                || Math.abs(self._movePosY - self._startPosY) > self._config.tapRadius) {
+            return true;
+        }
+    }
+
+    function nothing(){}
+
+    function exports(elm, opt, cb){
+        return new exports.Class(elm, opt, cb);
+    }
+
+    exports.Class = MomoTap;
 
     return exports;
 
@@ -4443,7 +6584,9 @@ define("choreo", [
             if (opt.easing) {
                 _.mix(timing_values, opt.easing.values);
                 _.mix(timing_functions, opt.easing.functions);
-                mainloop.config({ easing: timing_functions });
+                if (mainloop) {
+                    mainloop.config({ easing: timing_functions });
+                }
             }
             if (/(js|css)/.test(opt.renderMode)) {
                 useCSS = opt.renderMode === 'css';
@@ -4454,2168 +6597,6 @@ define("choreo", [
         transform: transform
 
     });
-
-    return exports;
-
-});
-
-/* @source ../cardkit/view/slidelist.js */;
-
-
-define("../cardkit/view/slidelist", [
-  "mo/lang",
-  "dollar",
-  "choreo",
-  "eventmaster",
-  "momo/swipe"
-], function(_, $, choreo, event, momoSwipe) {
-
-    var UID = '_ckMiniUid',
-    
-        uid = 0,
-        lib = {};
-
-    var default_config = {
-        items: '.item'
-    };
-
-    function Slidelist(elm, opt){
-        this.init(elm, opt);
-        this.set(this._config);
-    }
-
-    Slidelist.prototype = {
-
-        _defaults: default_config,
-
-        init: function(elm, opt){
-            this.event = event();
-            this._node = $(elm);
-            this._items = [];
-            opt = _.mix({}, this.data(), opt);
-            this._config = _.config({}, opt, this._defaults);
-        },
-
-        set: function(opt){
-            if (!opt) {
-                return this;
-            }
-            _.mix(this._config, opt);
-
-            if (opt.items) {
-                this._items.forEach(this._removeItem, this);
-                $(opt.items, this._node).forEach(this._addItem, this);
-            }
-
-            return this;
-        },
-
-        data: function(){
-            return this._node.data();
-        },
-
-        _addItem: function(elm){
-            elm = $(elm);
-            var self = this;
-            var item = {
-                order: this._items.length,
-                node: elm,
-                swipeLeft: momoSwipe(elm[0], {
-                    event: 'swipeleft'
-                }, function(){
-                    var n = item.order + 1;
-                    if (n > self._items.length - 1) {
-                        choreo().play().actor(self._node[0], {
-                            'transform': 'translateX(-20px)'
-                        }, 100, 'easeOut').follow().done(function(){
-                            return choreo().play().actor(self._node[0], {
-                                'transform': 'translateX(0px)'
-                            }, 100, 'easeIn').follow();
-                        });
-                        return;
-                        //n = 0;
-                    }
-                    var next = self._items[n].node;
-                    next.addClass('moving');
-                    choreo.transform(next[0], 'translateX', elm[0].offsetWidth + 'px');
-                    choreo().play().actor(self._node[0], {
-                        'transform': 'translateX(' + (0 - elm[0].offsetWidth) + 'px)'
-                    }, 300, 'easeInOut').follow().done(function(){
-                        choreo.transform(next[0], 'translateX', '0');
-                        next.addClass('enable').removeClass('moving');
-                        elm.removeClass('enable');
-                        choreo.transform(self._node[0], 'translateX', '0');
-                    });
-                    self.event.fire('change', [n]);
-                }),
-                swipeRight: momoSwipe(elm[0], {
-                    event: 'swiperight'
-                }, function(){
-                    var n = item.order - 1;
-                    if (n < 0) {
-                        choreo().play().actor(self._node[0], {
-                            'transform': 'translateX(20px)'
-                        }, 100, 'easeOut').follow().done(function(){
-                            return choreo().play().actor(self._node[0], {
-                                'transform': 'translateX(0px)'
-                            }, 100, 'easeIn').follow();
-                        });
-                        return;
-                        //n = self._items.length - 1;
-                    }
-                    var next = self._items[n].node;
-                    next.addClass('moving');
-                    choreo.transform(next[0], 'translateX', 0 - elm[0].offsetWidth + 'px');
-                    choreo().play().actor(self._node[0], {
-                        'transform': 'translateX(' + elm[0].offsetWidth + 'px)'
-                    }, 300, 'easeInOut').follow().done(function(){
-                        choreo.transform(next[0], 'translateX', '0');
-                        next.addClass('enable').removeClass('moving');
-                        elm.removeClass('enable');
-                        choreo.transform(self._node[0], 'translateX', '0');
-                    });
-                    self.event.fire('change', [n]);
-                })
-            };
-            this._items.push(item);
-        },
-
-        _removeItem: function(item){
-            item.swipeLeft.disable();
-            item.swipeRight.disable();
-            this._items.splice(this._items.indexOf(item), 1);
-        }
-    
-    };
-
-    function exports(elm, opt){
-        elm = $(elm);
-        var id = elm[0][UID];
-        if (id && lib[id]) {
-            return lib[id];
-        }
-        id = elm[0][UID] = ++uid;
-        opt = opt || {};
-        opt.items = '.ck-item';
-        var slide = lib[id] = new exports.Slidelist(elm, opt);
-        return slide;
-    }
-
-    exports.Slidelist = Slidelist;
-
-    return exports;
-
-});
-
-/* @source moui/overlay.js */;
-
-define('moui/overlay', [
-  "mo/lang",
-  "dollar",
-  "eventmaster",
-  "mo/template/string"
-], function(_, $, event, tpl) {
-
-    var body = $('body'),
-
-        NS = 'mouiOverlay',
-        TPL_VIEW =
-           '<div id="{{id}}" class="{{cname}}">\
-                <header><h2></h2></header>\
-                <article></article>\
-            </div>',
-        LOADING_DOTS = '<span class="loading"><i>.</i><i>.</i><i>.</i></span>',
-        LOADING_DEFAULT = '加载中',
-
-        _mid = 0,
-
-        default_config = {
-            title: '',
-            content: '',
-            className: 'moui-overlay',
-            openDelay: 50,
-            closeDelay: 0,
-            event: {}
-        };
-
-    function Overlay(opt) {
-        this.init(opt);
-        this.set(this._config);
-    }
-
-    Overlay.prototype = {
-
-        _ns: NS,
-        _template: TPL_VIEW,
-        _defaults: default_config,
-
-        init: function(opt){
-            this.id = this._ns + (++_mid);
-            this.event = event();
-            this._config = _.config({}, opt, this._defaults);
-            body.append(tpl.format(this._template, { 
-                id: this.id,
-                cname: this._config.className
-            }));
-            this._node = $('#' + this.id);
-            this._header = this._node.find('header').eq(0);
-            this._title = this._header.find('h1');
-            this._content = this._node.find('article').eq(0);
-            return this;
-        },
-
-        set: function(opt) {
-            if (!opt) {
-                return this;
-            }
-            _.config(this._config, opt, this._defaults);
-
-            if (typeof opt.title === 'string') {
-                this.setTitle(opt.title);
-            }
-
-            if (opt.content !== undefined) {
-                this.setContent(opt.content);
-            }
-
-            if (opt.className !== undefined) {
-                this._node[0].className = opt.className;
-            }
-
-            return this;
-        },
-
-        setTitle: function(text){
-            this._title.html(text);
-            return this;
-        },
-
-        setContent: function(html){
-            this._content.html(html);
-            return this;
-        },
-
-        showLoading: function(text) {
-            this._node.addClass('loading');
-            this._title.html((text || LOADING_DEFAULT) + LOADING_DOTS);
-            return this;
-        },
-
-        hideLoading: function(){
-            this._node.removeClass('loading');
-            this._title.html(this._config.title);
-            return this;
-        },
-
-        open: function(){
-            clearTimeout(this._actimer);
-            if (this.isOpened) {
-                this.cancelClose();
-                return this;
-            }
-            var self = this,
-                args = arguments;
-            this.prepareOpen.apply(self, args);
-            this._actimer = setTimeout(function(){
-                self.applyOpen.apply(self, args);
-            }, this._config.openDelay);
-            return this;
-        },
-
-        close: function(){
-            clearTimeout(this._actimer);
-            if (!this.isOpened) {
-                this.cancelOpen();
-                return this;
-            }
-            var self = this,
-                args = arguments;
-            this.prepareClose.apply(self, args);
-            this._actimer = setTimeout(function(){
-                self.applyClose.apply(self, args);
-            }, this._config.closeDelay);
-            return this;
-        },
-
-        prepareOpen: function(){
-            this._node.appendTo(body).addClass('rendered');
-            this.event.fire('prepareOpen', [this]);
-        },
-
-        prepareClose: function(){
-            this.event.fire('prepareClose', [this]);
-            this._node.removeClass('active');
-        },
-
-        cancelOpen: function(){
-            this._node.removeClass('rendered');
-            this.event.fire('cancelOpen', [this]);
-        },
-
-        cancelClose: function(){
-            this._node.addClass('active');
-            this.event.fire('cancelClose', [this]);
-        },
-
-        applyOpen: function() {
-            this.isOpened = true;
-            this._node.addClass('active');
-            this.event.fire('open', [this]);
-        },
-
-        applyClose: function() {
-            this.isOpened = false;
-            this._content.empty();
-            this._node.removeClass('rendered');
-            this.event.fire('close', [this]);
-        },
-
-        destroy: function() {
-            this._node.remove();
-            this.event.fire('destroy', [this]);
-            return this;
-        }
-
-    };
-
-    function exports(opt) {
-        return new exports.Overlay(opt);
-    }
-
-    exports.Overlay = Overlay;
-
-    return exports;
-
-});
-
-/* @source moui/growl.js */;
-
-define('moui/growl', [
-  "dollar",
-  "mo/lang",
-  "mo/template",
-  "moui/overlay"
-], function($, _, tpl, overlay) {
-
-    var NS = 'mouiGrowl',
-        TPL_VIEW =
-           '<div id="{{id}}" class="moui-growl">\
-                <header><h2></h2></header>\
-                <article></article>\
-            </div>',
-        CORNER = 'corner-',
-
-        default_config = {
-            className: 'moui-growl',
-            closeDelay: 300,
-            corner: 'center',
-            expires: 1400,
-            keepalive: false
-        };
-
-    var Growl = _.construct(overlay.Overlay);
-
-    _.mix(Growl.prototype, {
-
-        _ns: NS,
-        _template: TPL_VIEW,
-        _defaults: _.merge({}, default_config, Growl.prototype._defaults),
-
-        set: function(opt) {
-            this.superClass.set.call(this, opt);
-
-            if (opt.corner && opt.corner !== this._currentCorner) {
-                if (this._currentCorner) {
-                    this._node.removeClass(CORNER + this._currentCorner);
-                }
-                this._node.addClass(CORNER + opt.corner);
-                this._currentCorner = opt.corner;
-            }
-
-            return this;
-        },
-
-        applyOpen: function(){
-            clearTimeout(this._exptimer);
-            if (this._config.expires != -1) {
-                var self = this;
-                this._exptimer = setTimeout(function(){
-                    self.close();
-                }, this._config.expires);
-            }
-            return this.superClass.applyOpen.apply(this, arguments);
-        },
-
-        applyClose: function(){
-            this.isOpened = false;
-            this._node.removeClass('rendered');
-            this.event.fire('close', [this]);
-            if (!this._config.keepalive) {
-                this.destroy();
-            }
-        }
-
-    });
-
-    function exports(opt){
-        return new exports.Growl(opt);
-    }
-
-    exports.Growl = Growl;
-
-    return exports;
-
-});
-
-/* @source ../cardkit/view/growl.js */;
-
-define("../cardkit/view/growl", [
-  "mo/lang",
-  "dollar",
-  "moui/growl"
-], function(_, $, growl) {
-
-    var UID = '_ckGrowlUid',
-    
-        uid = 0,
-        lib = {};
-
-    function exports(elm, opt){
-        var id;
-        if (elm.nodeName) {
-            elm = $(elm);
-            id = elm[0][UID];
-            if (id && lib[id]) {
-                lib[id].close();
-            }
-            id = elm[0][UID] = ++uid;
-            opt = _.mix({}, elm.data(), opt);
-        } else {
-            opt = elm || {};
-        }
-        opt.className = 'ck-growl';
-        var g = growl(opt);
-        if (id) {
-            lib[id] = g;
-        }
-        return g;
-    }
-
-    return exports;
-
-});
-
-/* @source moui/control.js */;
-
-
-define('moui/control', [
-  "mo/lang",
-  "dollar",
-  "eventmaster"
-], function(_, $, event){
-
-    var default_config = {
-            field: null,
-            label: null,
-            enableVal: 1,
-            disableVal: 0,
-            enableLabel: '',
-            disableLabel: '',
-            loadingLabel: '稍等...'
-        };
-
-    function Control(elm, opt){
-        this.init(elm, opt);
-        this.set(this._config);
-    }
-
-    Control.prototype = {
-
-        _defaults: default_config,
-
-        init: function(elm, opt){
-            this.event = event();
-            var node = this._node = $(elm);
-            if (node.hasClass('enabled')) {
-                this.isEnabled = true;
-            }
-            opt = _.mix({
-                field: node,
-                label: node
-            }, this.data(), opt);
-            this.setNodes(opt);
-            if (this._label[0]) {
-                this._isLabelClose = this._label.isEmpty();
-            }
-            if (this.isEnabled) {
-                opt.enableVal = this.val();
-                opt.enableLabel = this.label();
-            } else {
-                opt.disableVal = this.val();
-                opt.disableLabel = this.label();
-            }
-            this._config = _.config({}, opt, this._defaults);
-        },
-
-        set: function(opt){
-            if (!opt) {
-                return this;
-            }
-            _.mix(this._config, opt);
-            this.setNodes(opt);
-            return this;
-        },
-
-        setNodes: function(opt){
-            if (opt.field !== undefined) {
-                if (opt.field) {
-                    this._field = $(opt.field, 
-                        typeof opt.field === 'string' && this._node);
-                } else {
-                    this._field = [];
-                }
-            }
-            if (opt.label !== undefined) {
-                if (opt.label) {
-                    this._label = $(opt.label, 
-                        typeof opt.label === 'string' && this._node);
-                } else {
-                    this._label = [];
-                }
-            }
-            return this;
-        },
-
-        val: function(v){
-            if (this._field[0]) {
-                if (this._field[0].nodeName === 'A') {
-                    return this._field.attr('href', v);
-                } else {
-                    return this._field.val(v);
-                }
-            }
-        },
-
-        label: function(str){
-            if (!this._label[0]) {
-                return;
-            }
-            if (this._isLabelClose) {
-                return this._label.val(str);
-            } else {
-                return this._label.html(str);
-            }
-        },
-
-        data: function(){
-            return this._node.data();
-        },
-
-        showLoading: function(){
-            this._node.addClass('loading');
-            this.label(this._config.loadingLabel);
-            return this;
-        },
-
-        hideLoading: function(){
-            this._node.removeClass('loading');
-            return this;
-        },
-
-        toggle: function(){
-            if (this.isEnabled) {
-                this.disable();
-            } else {
-                this.enable();
-            }
-            return this;
-        },
-
-        enable: function(){
-            if (this.isEnabled) {
-                return this;
-            }
-            this.isEnabled = true;
-            this._node.addClass('enabled');
-            this.val(this._config.enableVal);
-            if (this._config.enableLabel) {
-                this.label(this._config.enableLabel);
-            }
-            this.event.reset('disable')
-                .resolve('enable', [this]);
-            return this;
-        },
-
-        disable: function(){
-            if (!this.isEnabled) {
-                return this;
-            }
-            this.isEnabled = false;
-            this._node.removeClass('enabled');
-            this.val(this._config.disbleVal);
-            if (this._config.disableLabel) {
-                this.label(this._config.disableLabel);
-            }
-            this.event.reset('enable')
-                .resolve('disable', [this]);
-            return this;
-        }
-    
-    };
-
-    function exports(elm, opt){
-        return new exports.Control(elm, opt);
-    }
-
-    exports.Control = Control;
-
-    return exports;
-
-});
-
-
-/* @source moui/picker.js */;
-
-
-define('moui/picker', [
-  "mo/lang",
-  "dollar",
-  "eventmaster",
-  "moui/control"
-], function(_, $, event, control){
-
-    var OID = '_moPickerOid',
-
-        default_config = {
-            field: 'input[type="hidden"]',
-            options: '.option',
-            ignoreRepeat: false,
-            ignoreStatus: false,
-            multiselect: false
-        };
-
-    function Picker(elm, opt){
-        this.init(elm, opt);
-        this.set(this._config);
-    }
-
-    Picker.prototype = {
-
-        _defaults: default_config,
-
-        init: function(elm, opt){
-            this._uoid = 0;
-            this.event = event();
-            this._node = $(elm);
-            this._options = [];
-            opt = _.mix({}, this.data(), opt);
-            this._config = _.config({}, opt, this._defaults);
-            return this;
-        },
-
-        set: function(opt){
-            if (!opt) {
-                return this;
-            }
-            _.mix(this._config, opt);
-
-            if (opt.multiselect !== undefined) {
-                if (!opt.multiselect) {
-                    this._allSelected = null;
-                    this._lastSelected = null;
-                } else if (!this._allSelected) {
-                    this._allSelected = [];
-                }
-            }
-
-            if (opt.field !== undefined) {
-                if (opt.field) {
-                    this._field = $(opt.field, 
-                        typeof opt.field === 'string' && this._node);
-                } else {
-                    this._field = [];
-                }
-            }
-
-            if (opt.options) {
-                this._options.forEach(this.removeOption, this);
-                $(opt.options, this._node).forEach(this.addOption, this);
-            }
-
-            return this;
-        },
-
-        addOption: function(elm){
-            elm = $(elm)[0];
-            if (elm[OID]) {
-                return;
-            }
-            elm[OID] = ++this._uoid;
-            var controller = control(elm, {
-                enableVal: elm.value,
-                label: false
-            });
-            controller.event.bind('enable', when_enable.bind(this))
-                .bind('disable', when_disable.bind(this));
-            this._options.push(controller);
-            if (controller.isEnabled) {
-                change.call(this, 'enable', controller);
-            }
-            return this;
-        },
-
-        removeOption: function(elm){
-            var controller;
-            if (elm.constructor === control.Control) {
-                controller = elm;
-                elm = elm._node[0];
-            } else {
-                controller = this.getOption(elm);
-            }
-            this.unselect(elm);
-            if (controller) {
-                this._options.splice(
-                    this._options.indexOf(controller), 1);
-            }
-            return this;
-        },
-
-        getOption: function(elm){
-            if (typeof elm === 'number') {
-                elm = this._options[elm];
-            } else if (typeof elm === 'string') {
-                elm = this._options.filter(function(controller){
-                    return controller.val() === elm;
-                })[0];
-            } else {
-                var oid = $(elm)[0][OID];
-                if (!oid) {
-                    return null;
-                }
-                elm = this._options.filter(function(controller){
-                    return controller._node[0][OID] === oid;
-                })[0];
-            }
-            return elm;
-        },
-
-        val: function(){
-            if (!this._config) {
-                return;
-            }
-            if (this._config.multiselect) {
-                return this._allSelected.map(function(controller){
-                    return controller.val();
-                });
-            } else {
-                if (this._lastSelected) {
-                    return this._lastSelected.val();
-                }
-            }
-        },
-
-        data: function(){
-            return this._node.data();
-        },
-
-        showLoading: function(){
-            this._node.addClass('loading');
-            return this;
-        },
-
-        hideLoading: function(){
-            this._node.removeClass('loading');
-            return this;
-        },
-
-        undo: function(){
-            if (this._lastActionTarget) {
-                this._lastActionTarget.toggle();
-            }
-            return this;
-        },
-
-        selectAll: function(){
-            if (this._config.multiselect) {
-                this._options.forEach(function(controller){
-                    controller.enable();
-                });
-            }
-            this._lastActionTarget = null;
-            return this;
-        },
-
-        unselectAll: function(){
-            if (this._config.multiselect) {
-                this._options.forEach(function(controller){
-                    controller.disable();
-                });
-                this._lastActionTarget = null;
-            } else {
-                this.undo();
-            }
-            return this;
-        },
-
-        selectInvert: function(){
-            if (this._config.multiselect) {
-                this._options.forEach(function(controller){
-                    controller.toggle();
-                });
-            }
-            this._lastActionTarget = null;
-            return this;
-        },
-
-        select: function(i){
-            var controller = this.getOption(i);
-            if (controller) {
-                if (!this._config.multiselect && this._config.ignoreStatus) {
-                    change.call(this, 'enable', controller);
-                    this.event.fire('change', [this, controller]);
-                } else {
-                    if (this._config.multiselect 
-                            && this._allSelected.indexOf(controller) !== -1
-                            || !this._config.multiselect
-                            && this._lastSelected === controller) {
-                        if (!this._config.ignoreRepeat) {
-                            return this.unselect(i);
-                        }
-                    }
-                    this._lastActionTarget = controller.enable();
-                }
-            }
-            return this;
-        },
-
-        unselect: function(i){
-            if (!i) {
-                this.unselectAll();
-            } else {
-                var controller = this.getOption(i);
-                if (controller) {
-                    this._lastActionTarget = controller.disable();
-                }
-            }
-            return this;
-        }
-
-    };
-
-    function when_enable(controller){
-        change.call(this, 'enable', controller);
-        this.event.fire('change', [this, controller]);
-    }
-
-    function when_disable(controller){
-        change.call(this, 'disable', controller);
-        this.event.fire('change', [this, controller]);
-    }
-
-    function change(subject, controller){
-        if (subject === 'enable') {
-            if (this._config.multiselect) {
-                this._allSelected.push(controller);
-            } else {
-                var last = this._lastSelected;
-                this._lastSelected = controller;
-                if (last) {
-                    last.disable();
-                }
-            }
-        } else {
-            if (this._config.multiselect) {
-                var i = this._allSelected.indexOf(controller);
-                if (i !== -1) {
-                    this._allSelected.splice(i, 1);
-                }
-            } else {
-                if (controller 
-                        && this._lastSelected !== controller) {
-                    return;
-                }
-                this._lastSelected = null;
-            }
-        }
-        if (this._field[0]) {
-            this._field.val(this.val());
-        }
-    }
-
-    function exports(elm, opt){
-        return new exports.Picker(elm, opt);
-    }
-
-    exports.Picker = Picker;
-
-    return exports;
-
-});
-
-
-/* @source moui/actionview.js */;
-
-define('moui/actionview', [
-  "dollar",
-  "mo/lang",
-  "mo/template/string",
-  "moui/overlay",
-  "moui/picker"
-], function($, _, tpl, overlay, picker) {
-
-    var mix = _.mix,
-
-        NS = 'mouiActionView',
-        TPL_VIEW = 
-            '<div id="{{id}}" class="{{cname}}">\
-                <div class="shd"></div>\
-                <div class="wrapper">\
-                    <div class="content">\
-                        <header><h1></h1></header>\
-                        <div class="desc"></div>\
-                        <article></article>\
-                    </div>\
-                </div>\
-                <footer>\
-                    <input type="button" class="confirm" data-is-default="true">\
-                    <input type="button" class="cancel">\
-                </footer>\
-            </div>',
-
-        default_config = {
-            className: 'moui-actionview',
-            closeDelay: 300,
-            confirmText: '确认',
-            cancelText: '取消',
-            options: null,
-            multiselect: false
-        };
-
-    var ActionView = _.construct(overlay.Overlay);
-
-    mix(ActionView.prototype, {
-
-        _ns: NS,
-        _template: TPL_VIEW,
-        _defaults: _.merge({}, default_config, ActionView.prototype._defaults),
-
-        init: function(opt) {
-            this.superClass.init.call(this, opt);
-            this._wrapper = this._node.find('.wrapper').eq(0);
-            this._actionsWrapper = this._content;
-            this._wrapperContent = this._wrapper.find('.content').eq(0);
-            this._content = this._wrapper.find('.desc').eq(0);
-            this._footer = this._node.find('footer').eq(-1);
-            this._confirmBtn = this._footer.find('.confirm');
-            this._cancelBtn = this._footer.find('.cancel');
-            return this;
-        },
-
-        set: function(opt) {
-            if (!opt) {
-                return this;
-            }
-            this.superClass.set.call(this, opt);
-
-            if (opt.options !== undefined) {
-                this._actionsWrapper.empty();
-                var options = opt.options 
-                    ? $(opt.options).clone()
-                    : [];
-                if (options.length) {
-                    this._actionsWrapper.append(options);
-                    this._picker = picker(this._actionsWrapper, {
-                        options: options,
-                        multiselect: this._config.multiselect,
-                        ignoreStatus: !this._config.multiselect
-                    });
-                    this._node.removeClass('confirm-kind');
-                } else {
-                    this._node.addClass('confirm-kind');
-                }
-            }
-
-            if (opt.multiselect !== undefined) {
-                if (opt.multiselect) {
-                    this._footer.addClass('multi');
-                } else {
-                    this._footer.removeClass('multi');
-                }
-            }
-
-            if (opt.confirmText) {
-                this._confirmBtn.val(opt.confirmText);
-            }
-
-            if (opt.cancelText) {
-                this._cancelBtn.val(opt.cancelText);
-            }
-
-            return this;
-        },
-
-        val: function(){
-            if (this._picker) {
-                return this._picker.val();
-            }
-        },
-
-        confirm: function(){
-            this.event.fire('confirm', [this, this._picker]);
-            return this.ok();
-        },
-
-        cancel: function(){
-            this.event.fire('cancel', [this, this.picker]);
-            return this.ok();
-        },
-
-        ok: function(){
-            this.close();
-            return this.event.promise('close');
-        },
-
-        applyOpen: function(){
-            if (!this._config.multiselect && this._picker) {
-                var self = this;
-                this._picker.event.once('change', function(){
-                    self.confirm();
-                });
-            }
-            this.superClass.applyOpen.apply(this, arguments);
-        },
-
-        applyClose: function(){
-            if (!this._config.multiselect && this._picker) {
-                this._picker.event.reset();
-            }
-            this.superClass.applyClose.apply(this, arguments);
-        }
-
-    });
-
-    ActionView.prototype.done = ActionView.prototype.ok;
-
-    ['select', 'unselect', 'undo',
-        'selectAll', 'unselectAll', 'selectInvert'].forEach(function(method){
-        this[method] = function(){
-            return this._picker[method].apply(this._picker, arguments);
-        };
-    }, ActionView.prototype);
-
-    function exports(opt) {
-        return new exports.ActionView(opt);
-    }
-
-    exports.ActionView = ActionView;
-
-    return exports;
-
-});
-
-/* @source ../cardkit/view/actionview.js */;
-
-define("../cardkit/view/actionview", [
-  "mo/lang",
-  "dollar",
-  "moui/actionview",
-  "../cardkit/bus"
-], function(_, $, actionView, bus) {
-
-    var UID = '_ckActionViewUid',
-    
-        uid = 0,
-        lib = {};
-
-    function exports(elm, opt){
-        var id = elm;
-        if (typeof elm === 'object') {
-            elm = $(elm);
-            id = elm[0][UID];
-        } else {
-            elm = false;
-        }
-        if (id && lib[id]) {
-            return lib[id].set(opt);
-        }
-        if (elm) {
-            id = elm[0][UID] = ++uid;
-        }
-        opt = opt || {};
-        opt.className = 'ck-actionview';
-        var view = lib[id] = actionView(opt);
-        var eprops = {
-            component: view
-        };
-        view.event.bind('prepareOpen', function(view){
-            exports.current = view;
-            bus.fire('actionView:prepareOpen', [view]);
-        }).bind('cancelOpen', function(view){
-            exports.current = null;
-            bus.fire('actionView:cancelOpen', [view]);
-        }).bind('open', function(view){
-            bus.fire('actionView:open', [view]);
-            if (elm) {
-                elm.trigger('actionView:open', eprops);
-            }
-        }).bind('close', function(){
-            exports.current = null;
-            bus.fire('actionView:close', [view]);
-            if (elm) {
-                elm.trigger('actionView:close', eprops);
-            }
-        }).bind('cancel', function(){
-            if (elm) {
-                elm.trigger('actionView:cancel', eprops);
-            }
-        }).bind('confirm', function(view, picker){
-            if (elm) {
-                elm.trigger('actionView:confirm', eprops);
-            }
-            if (picker && picker._lastSelected) {
-                var target = picker._lastSelected._node.attr('target');
-                if (target) {
-                    bus.fire('actionView:jump', [view, picker.val(), target]);
-                }
-            }
-        });
-        if (elm) {
-        }
-        return view;
-    }
-
-    return exports;
-
-});
-
-/* @source moui/modalview.js */;
-
-define('moui/modalview', [
-  "dollar",
-  "mo/lang",
-  "mo/template/string",
-  "moui/overlay"
-], function($, _, tpl, overlay) {
-
-    var mix = _.mix,
-
-        NS = 'mouiModalView',
-        TPL_VIEW =
-           '<div id="{{id}}" class="{{cname}}">\
-                <div class="shd"></div>\
-                <div class="wrapper">\
-                    <header>\
-                        <button type="button" class="confirm" data-is-default="true"></button>\
-                        <button type="button" class="cancel"></button>\
-                        <h1></h1>\
-                    </header>\
-                    <article><div class="content"></div></article>\
-                </div>\
-            </div>',
-
-        default_config = {
-            className: 'moui-modalview',
-            iframe: false,
-            hideConfirm: false,
-            confirmText: '确认',
-            cancelText: '取消'
-        };
-
-
-    var ModalView = _.construct(overlay.Overlay);
-
-    mix(ModalView.prototype, {
-
-        _ns: NS,
-        _template: TPL_VIEW,
-        _defaults: _.merge({}, default_config, ModalView.prototype._defaults),
-
-        init: function(opt) {
-            this.superClass.init.call(this, opt);
-            this._wrapper = this._node.find('.wrapper').eq(0);
-            this._contentWrapper = this._wrapper.find('article').eq(0);
-            this._content = this._contentWrapper.find('.content').eq(0);
-            this._confirmBtn = this._header.find('.confirm');
-            this._cancelBtn = this._header.find('.cancel');
-            return this;
-        },
-
-        set: function(opt) {
-            if (!opt) {
-                return this;
-            }
-            var self = this;
-            self.superClass.set.call(self, opt);
-
-            if (opt.content !== undefined) {
-                self._config.iframe = null;
-            } else if (opt.iframe) {
-                self._setIframeContent(opt);
-            } 
-            
-            if (opt.hideConfirm !== undefined) {
-                if (opt.hideConfirm) {
-                    this._confirmBtn.hide();
-                } else {
-                    this._confirmBtn.show();
-                }
-            }
-
-            if (opt.confirmText) {
-                this._confirmBtn.html(opt.confirmText);
-            }
-
-            if (opt.cancelText) {
-                this._cancelBtn.html(opt.cancelText);
-            }
-
-            return self;
-        },
-
-        setContent: function(html){
-            this.superClass.setContent.call(this, html);
-            if (html) {
-                this.event.fire('contentchange', [this]);
-            }
-            return this;
-        },
-
-        _setIframeContent: function(){
-            var self = this;
-            this._clearIframeContent();
-            self.setContent('');
-            self.showLoading();
-            self._iframeContent = $('<iframe class="moui-modalview-iframebd" '
-                    + 'frameborder="0" scrolling="no" style="visibility:hidden;width:100%;">'
-                    + '</iframe>')
-                .bind('load', function(){
-                    try {
-                        if (!this.contentWindow.document.body.innerHTML) {
-                            return;
-                        }
-                        self._iframeWindow = $(this.contentWindow);
-                        if (!self._iframeContent
-                            && self._iframeWindow[0].location.href !== self._config.iframe) {
-                            return;
-                        }
-                        self._iframeContent[0].style.visibility = '';
-                        self.event.resolve("frameOnload", [self]);
-                        self.hideLoading();
-                    } catch(ex) {}
-                }).appendTo(self._content);
-        },
-
-        _clearIframeContent: function(){
-            if (this._iframeContent) {
-                this._iframeContent.remove();
-                this._iframeContent = null;
-            }
-            this.event.reset("frameOnload");
-        },
-
-        confirm: function(){
-            this.event.fire('confirm', [this]);
-            return this;
-        },
-
-        cancel: function(){
-            this.event.fire('cancel', [this]);
-            this.ok();
-            return this;
-        },
-
-        ok: function(){
-            this.close();
-            return this.event.promise('close');
-        },
-
-        applyOpen: function(){
-            this.superClass.applyOpen.apply(this, arguments);
-            if (this._config.iframe) {
-                this._iframeContent.attr('src', this._config.iframe);
-            }
-        },
-
-        applyClose: function(){
-            this._clearIframeContent();
-            this._contentWrapper[0].scrollTop = 0;
-            this.superClass.applyClose.apply(this, arguments);
-        }
-
-    });
-
-    ModalView.prototype.done = ModalView.prototype.ok;
-
-    function exports(opt) {
-        return new exports.ModalView(opt);
-    }
-
-    exports.ModalView = ModalView;
-
-    return exports;
-
-});
-
-/* @source mo/network/ajax.js */;
-
-/**
- * using AMD (Asynchronous Module Definition) API with OzJS
- * see http://ozjs.org for details
- *
- * Copyright (C) 2010-2012, Dexter.Yy, MIT License
- * vim: et:ts=4:sw=4:sts=4
- */
-define("mo/network/ajax", [
-  "mo/browsers"
-], function(browsers, require, exports){
-
-    var httpParam = function(a) {
-        var s = [];
-        if (a.constructor == Array) {
-            for (var i = 0; i < a.length; i++)
-                s.push(a[i].name + "=" + encodeURIComponent(a[i].value));
-        } else {
-            for (var j in a)
-                s.push(j + "=" + encodeURIComponent(a[j]));
-        }
-        return s.join("&").replace(/%20/g, "+");
-    };
-
-    /**
-     * From jquery by John Resig
-     */ 
-    var ajax = function(s){
-        var options = {
-            type: s.type || "GET",
-            url: s.url || "",
-            data: s.data || null,
-            dataType: s.dataType,
-            contentType: s.contentType === false? false : (s.contentType || "application/x-www-form-urlencoded"),
-            username: s.username || null,
-            password: s.password || null,
-            timeout: s.timeout || 0,
-            processData: s.processData === undefined ? true : s.processData,
-            beforeSend: s.beforeSend || function(){},
-            complete: s.complete || function(){},
-            handleError: s.handleError || function(){},
-            success: s.success || function(){},
-            accepts: {
-                xml: "application/xml, text/xml",
-                html: "text/html",
-                script: "text/javascript, application/javascript",
-                json: "application/json, text/javascript",
-                text: "text/plain",
-                _default: "*/*"
-            }
-        };
-        
-        if ( options.data && options.processData && typeof options.data != "string" )
-            options.data = httpParam(options.data);
-        if ( options.data && options.type.toLowerCase() == "get" ) {
-            options.url += (options.url.match(/\?/) ? "&" : "?") + options.data;
-            options.data = null;
-        }
-        
-        var status, data, requestDone = false, xhr = window.ActiveXObject ? new ActiveXObject("Microsoft.XMLHTTP") : new XMLHttpRequest();
-        xhr.open( options.type, options.url, true, options.username, options.password );
-        try {
-            if ( options.data && options.contentType !== false )
-                xhr.setRequestHeader("Content-Type", options.contentType);
-            xhr.setRequestHeader("X-Requested-With", "XMLHttpRequest");
-            xhr.setRequestHeader("Accept", s.dataType && options.accepts[ s.dataType ] ?
-                options.accepts[ s.dataType ] + ", */*" :
-                options.accepts._default );
-        } catch(e){}
-        
-        if ( options.beforeSend )
-            options.beforeSend(xhr);
-            
-        var onreadystatechange = function(isTimeout){
-            if ( !requestDone && xhr && (xhr.readyState == 4 || isTimeout == "timeout") ) {
-                requestDone = true;
-                if (ival) {
-                    clearInterval(ival);
-                    ival = null;
-                }
-
-                status = isTimeout == "timeout" && "timeout" || !httpSuccess( xhr ) && "error" || "success";
-
-                if ( status == "success" ) {
-                    try {
-                        data = httpData( xhr, options.dataType );
-                    } catch(e) {
-                        status = "parsererror";
-                    }
-                    
-                    options.success( data, status );
-                } else
-                    options.handleError( xhr, status );
-                options.complete( xhr, status );
-                xhr = null;
-            }
-        };
-
-        var ival = setInterval(onreadystatechange, 13); 
-        if ( options.timeout > 0 )
-            setTimeout(function(){
-                if ( xhr ) {
-                    xhr.abort();
-                    if( !requestDone )
-                        onreadystatechange( "timeout" );
-                }
-            }, options.timeout);    
-            
-        xhr.send(options.data);
-
-        function httpSuccess(r) {
-            try {
-                return !r.status && location.protocol == "file:" || ( r.status >= 200 && r.status < 300 ) || r.status == 304 || r.status == 1223 || browsers.safari && !r.status;
-            } catch(e){}
-            return false;
-        }
-        function httpData(r,type) {
-            var ct = r.getResponseHeader("content-type");
-            var xml = type == "xml" || !type && ct && ct.indexOf("xml") >= 0;
-            var data = xml ? r.responseXML : r.responseText;
-            if ( xml && data.documentElement.tagName == "parsererror" )
-                throw "parsererror";
-            if ( type == "script" )
-                eval.call( window, data );
-            if ( type == "json" )
-                data = eval("(" + data + ")");
-            return data;
-        }
-        return xhr;
-    };
-
-    exports.ajax = ajax;
-    exports.params = httpParam;
-
-});
-
-/* @source mo/network.js */;
-
-/**
- * Standalone jQuery.ajax API and enhanced getJSON, and so on
- *
- * using AMD (Asynchronous Module Definition) API with OzJS
- * see http://ozjs.org for details
- *
- * Copyright (C) 2010-2012, Dexter.Yy, MIT License
- * vim: et:ts=4:sw=4:sts=4
- */
-define("mo/network", [
-  "mo/lang",
-  "mo/network/ajax"
-], function(_, net, require, exports){
-
-    var window = this,
-        uuid4jsonp = 1;
-
-    _.mix(exports, net);
-
-    exports.getScript = function(url, op){
-        var doc = _.isWindow(this) ? this.document : document,
-            s = doc.createElement("script");
-        s.type = "text/javascript";
-        s.async = "async"; //for firefox3.6
-        if (!op)
-            op = {};
-        else if (_.isFunction(op))
-            op = { callback: op };
-        if (op.charset)
-            s.charset = op.charset;
-        s.src = url;
-        var h = doc.getElementsByTagName("head")[0];
-        s.onload = s.onreadystatechange = function(__, isAbort){
-            if ( isAbort || !s.readyState || /loaded|complete/.test(s.readyState) ) {
-                s.onload = s.onreadystatechange = null;
-                if (h && s.parentNode) {
-                    h.removeChild(s);
-                }
-                s = undefined;
-                if (!isAbort && op.callback) {
-                    op.callback();
-                }
-            }
-        };
-        h.insertBefore(s, h.firstChild);
-    };
-
-    exports.getStyle = function(url){
-        var doc = this.document || document,
-            s = doc.createElement("link");
-        s.setAttribute('type', 'text/css');
-        s.setAttribute('rel', 'stylesheet');
-        s.setAttribute('href', url);
-        var h = doc.getElementsByTagName("head")[0];
-        h.appendChild(s);
-    };
-
-    var RE_DOMAIN = /https?\:\/\/(.+?)\//;
-    exports.getJSON = function(url, data, fn, op){
-        var domain = url.match(RE_DOMAIN);
-        if (!data || _.isFunction(data)) {
-            op = fn;
-            fn = data;
-            data = {};
-        }
-        if (fn) {
-            if ((!op || !op.isScript) && (!domain || domain[1] === window.location.host)) {
-                exports.ajax({
-                    url: url,
-                    data: data,
-                    success: fn,
-                    error: op && op.error,
-                    dataType: "json"
-                });
-                return true;
-            }
-        }
-        op = _.mix({
-            charset: "utf-8",
-            callback: "__oz_jsonp" + (++uuid4jsonp)
-        }, op || {});
-        if (op.random) {
-            data[op.random] = +new Date();
-        }
-        var cbName = op.callbackName || 'jsoncallback';
-        data[cbName] = op.callback;
-        url = [url, /\?/.test(url) ? "&" : "?", exports.httpParam(data)].join("");
-        if (fn) {
-            _.ns(op.callback, fn);
-        }
-        delete op.callback;
-        exports.getScript(url, op);
-    };
-
-    exports.getRequest = function(url, params){
-        var img = new Image();
-        img.onload = function(){ img = null; }; //阻止IE下的自动垃圾回收引起的请求未发出状况
-        img.src = !params ? url : [url, /\?/.test(url) ? "&" : "?", typeof params == "string" ? params : exports.httpParam(params)].join('');
-    };
-
-    exports.parseJSON = function(json){
-        json = json
-            .replace(/^[\w(<\/*!\s]*?\{/, '{')
-            .replace(/[^\}]*$/, '');
-        try {
-            json = window.JSON ? window.JSON.parse(json) : eval(json);
-        } catch(ex) {
-            json = false;
-        }
-        return json;
-    };
-
-});
-
-/* @source ../cardkit/view/modalcard.js */;
-
-define("../cardkit/view/modalcard", [
-  "dollar",
-  "mo/network",
-  "moui/modalview",
-  "../cardkit/supports"
-], function($, net, modal, supports) {
-
-    var modalCard = modal({
-            className: 'ck-modalview',
-            closeDelay: 400
-        }),
-        origin_set = modalCard.set;
-
-    modalCard.set = function(opt){
-        if (!opt) {
-            return this;
-        }
-        var self = this,
-            url = opt.jsonUrl || opt.url;
-        if (url) {
-            opt.content = '';
-            self.showLoading();
-            net.ajax({
-                url: url,
-                dataType: opt.jsonUrl ? 'json' : 'text',
-                success: function(data){
-                    if (opt.jsonUrl) {
-                        data = data.html;
-                    }
-                    self.setContent(data);
-                    self.hideLoading();
-                }
-            });
-        }
-
-        if (opt.iframeUrl) {
-            opt.iframe = opt.iframeUrl;
-        }
-
-        if (opt.source) {
-            opt.content = $('.' + opt.source).map(function(elm){
-                if ($(elm).attr('type') === 'text/jscode') {
-                    return '<script>' + elm.innerHTML + '</script>';
-                } else {
-                    return elm.innerHTML;
-                }
-            }).join('');
-        }
-
-        return origin_set.call(this, opt);
-    };
-    
-    if (supports.UNIVERSAL_TRANS) {
-        modalCard.ok = modalCard.done = function(){
-            if (!history.state) {
-                history.go(-2);
-            } else {
-                history.back();
-            }
-            return this.event.promise('close');
-        };
-    } else {
-        modalCard.ok = modalCard.done = function(){
-            this.event.fire('needclose');
-            return this.event.promise('close');
-        };
-    }
-
-    modalCard.event.bind('confirm', function(modal){
-        modal.event.fire('confirmOnThis', arguments);
-    }).bind('close', function(modal){
-        modal.event.unbind('confirmOnThis');
-    });
-
-    return modalCard;
-
-});
-
-/* @source moui/slider.js */;
-
-define('moui/slider', [
-  "mo/lang",
-  "dollar",
-  "eventmaster"
-], function(_, $, event) {
-    function Slider(elm, opt) {
-        this.init(elm, opt);
-    }
-
-    Slider.prototype = {
-        init: function(elm) {
-            var node = this._node = $(elm),
-                field;
-
-            this.event = event();
-
-            if (node.data('init')) {
-                return;
-            } else {
-                node.data('init', true);
-            }
-
-            this._field = field = node.find('.slider-field');
-            this._hoverArea = node.find('.slider-hover');
-            this._selectedArea = node.find('.slider-selected');
-
-            this._step = field.attr('step'),
-            this._max = field.attr('max'),
-            this._min = field.attr('min');
-
-            this._stepWidth = this._step * node.width() / (this._max - this._min);
-        },
-
-        calc: function(event) {
-            var pageX = (event.changedTouches) ? event.changedTouches[0].pageX : event.pageX,
-                node = this._node,
-                stepWidth = this._stepWidth,
-                step = this._step,
-                offsetX = pageX - node.offset().left;
-
-            if (offsetX > node.width()) {
-                offsetX = node.width();
-            } else if (offsetX < 0) {
-                offsetX = 0;
-            }
-
-            return Math.ceil(offsetX / stepWidth) * step;
-        },
-
-        val: function(v) {
-            if (this._field[0]) {
-                var returnValue = this._field.val(v);
-                if (v !== undefined) {
-                    this.event.fire('change');
-                }
-                return returnValue;
-            }
-        },
-
-        show: function(v) {
-            var stepWidth = this._stepWidth,
-                selectedArea = this._selectedArea,
-                hoverArea = this._hoverArea;
-
-            hoverArea.hide();
-            selectedArea.css({width:v * stepWidth})
-                .show();
-        },
-
-        pretend: function(v) {
-            var stepWidth = this._stepWidth,
-                selectedArea = this._selectedArea,
-                hoverArea = this._hoverArea;
-
-            var width = v * stepWidth;
-
-            if (hoverArea.data('width') != width) {
-                selectedArea.hide();
-                hoverArea.css({width: width})
-                    .show()
-                    .data('width', width);
-            }
-        }
-    };
-
-    function exports(elm, opt){
-        return new exports.Slider(elm, opt);
-    }
-
-    exports.Slider = Slider;
-
-    return exports;
-
-});
-
-/* @source ../cardkit/view/stars.js */;
-
-define("../cardkit/view/stars", [
-  "mo/lang",
-  "dollar",
-  "mo/network",
-  "moui/slider"
-], function(_, $, net, slider) {
-    var UID = '_ckStarsUid',
-        uid = 0,
-        lib = {};
-
-    function exports(elm) {
-        elm = $(elm);
-        var id = elm[0][UID];
-        if (id && lib[id]) {
-            return lib[id];
-        }
-        id = elm[0][UID] = ++uid;
-        var s = lib[id] = slider(elm);
-
-        s.event.bind('change', function() {
-            var value = s.val();
-            s.show(value);
-        });
-
-        return s;
-    }
-
-    exports.gc = function(check) {
-        for (var i in lib) {
-            if (check(lib[i])) {
-                delete lib[i];
-            }
-        }
-    };
-
-    return exports;
-});
-
-/* @source ../cardkit/view/picker.js */;
-
-define("../cardkit/view/picker", [
-  "mo/lang",
-  "dollar",
-  "mo/network",
-  "moui/picker"
-], function(_, $, net, picker) {
-
-    var UID = '_ckPickerUid',
-    
-        uid = 0,
-        lib = {};
-
-    function request(cfg, fn){
-        var url = cfg.jsonUrl || cfg.url;
-        if (url) {
-            net.ajax({
-                url: url,
-                type: cfg.method || 'post',
-                dataType: cfg.jsonUrl ? 'json' : 'text',
-                success: fn
-            });
-        } else {
-            fn(false);
-        }
-    }
-
-    function exports(elm, opt){
-        elm = $(elm);
-        var id = elm[0][UID];
-        if (id && lib[id]) {
-            return lib[id].set(opt);
-        }
-        id = elm[0][UID] = ++uid;
-        opt = _.mix({
-            options: '.ck-option'
-        }, opt || {});
-        var p = lib[id] = picker(elm, opt);
-
-        p.event.bind('change', function(p, controller){
-            var cfg = controller.data(), 
-                eprops = {
-                    component: p 
-                },
-                req_opt;
-            p.showLoading();
-            if (controller.isEnabled) {
-                req_opt = {
-                    method: cfg.requestMethod,
-                    url: cfg.enableUrl,
-                    jsonUrl: cfg.enableJsonUrl
-                };
-            } else {
-                req_opt = {
-                    method: cfg.requestMethod,
-                    url: cfg.disableUrl,
-                    jsonUrl: cfg.disableJsonUrl
-                };
-            }
-            request(req_opt, function(data){
-                p.hideLoading();
-                if (data !== false) {
-                    p.responseData = data;
-                    elm.trigger('picker:response', eprops);
-                }
-            });
-            elm.trigger('picker:change', eprops);
-        });
-
-        return p;
-    }
-
-    exports.gc = function(check){
-        for (var i in lib) {
-            if (check(lib[i])) {
-                delete lib[i];
-            }
-        }
-    };
-
-    return exports;
-
-});
-
-/* @source ../cardkit/view/control.js */;
-
-define("../cardkit/view/control", [
-  "mo/lang",
-  "dollar",
-  "mo/network",
-  "moui/control"
-], function(_, $, net, control) {
-
-    var UID = '_ckControlUid',
-    
-        uid = 0,
-        lib = {};
-
-    var CkControl = _.construct(control.Control);
-
-    _.mix(CkControl.prototype, {
-
-        enable: function(){
-            var cfg = this.data();
-            return this.request({
-                method: cfg.requestMethod,
-                url: cfg.enableUrl,
-                jsonUrl: cfg.enableJsonUrl
-            }, function(){
-                this.superClass.enable.call(this);
-            });
-        },
-
-        disable: function(){
-            var cfg = this.data();
-            return this.request({
-                method: cfg.requestMethod,
-                url: cfg.disableUrl,
-                jsonUrl: cfg.disableJsonUrl
-            }, function(){
-                this.superClass.disable.call(this);
-            });
-        },
-
-        request: function(cfg, fn){
-            var self = this,
-                url = cfg.jsonUrl || cfg.url;
-            if (url) {
-                self.showLoading();
-                net.ajax({
-                    url: url,
-                    type: cfg.method || 'post',
-                    dataType: cfg.jsonUrl ? 'json' : 'text',
-                    success: function(data){
-                        self.hideLoading();
-                        self.responseData = data;
-                        fn.call(self);
-                    }
-                });
-            } else {
-                fn.call(self);
-            }
-            return this;
-        }
-    
-    });
-
-    function exports(elm, opt){
-        elm = $(elm);
-        var id = elm[0][UID];
-        if (id && lib[id]) {
-            return lib[id].set(opt);
-        }
-        id = elm[0][UID] = ++uid;
-        var controller = lib[id] = new exports.Control(elm, opt);
-        controller.event.bind('enable', function(controller){
-            elm.trigger('control:enable', {
-                component: controller
-            });
-        }).bind('disable', function(controller){
-            elm.trigger('control:disable', {
-                component: controller
-            });
-        });
-        return controller;
-    }
-
-    exports.Control = CkControl;
-
-    exports.gc = function(check){
-        for (var i in lib) {
-            if (check(lib[i])) {
-                delete lib[i];
-            }
-        }
-    };
-
-    return exports;
-
-});
-
-/* @source momo/scroll.js */;
-
-
-define('momo/scroll', [
-  "mo/lang",
-  "momo/base"
-], function(_, momoBase){
-
-    var MomoScroll = _.construct(momoBase.Class);
-
-    _.mix(MomoScroll.prototype, {
-
-        EVENTS: [
-            'scrolldown', 
-            'scrollup', 
-            'scrollstart', 
-            'scrollend'
-        ],
-        DEFAULT_CONFIG: {
-            'directThreshold': 5,
-            'scrollEndGap': 5
-        },
-
-        watchScroll: function(elm){
-            this.scrollingNode = elm;
-        },
-
-        checkScollDirection: function(y){
-            var node = { target: this.node },
-                d = y - this._lastY,
-                threshold = this._config.directThreshold;
-            if (d < 0 - threshold) {
-                if (this._scrollDown !== true) {
-                    this.trigger(node, this.event.scrolldown);
-                }
-                this._lastY = y;
-                this._scrollDown = true;
-            } else if (d > threshold) {
-                if (this._scrollDown !== false) {
-                    this.trigger(node, this.event.scrollup);
-                }
-                this._lastY = y;
-                this._scrollDown = false;
-            }
-        },
-
-        press: function(e){
-            var self = this,
-                t = this.SUPPORT_TOUCH ? e.touches[0] : e;
-            self._scrollDown = null;
-            self._lastY = t.clientY;
-            self._scrollY = null;
-            if (self.scrollingNode) {
-                var scrolling = self._scrolling;
-                self._scrolling = false;
-                var tm = self._tm = e.timeStamp;
-                self.once(self.MOVE, function(){
-                    self.once('scroll', function(){
-                        if (tm === self._tm) {
-                            self._scrollY = self.scrollingNode.scrollTop;
-                            if (!scrolling) {
-                                self._started = true;
-                                self.trigger({ target: self.node }, self.event.scrollstart);
-                            }
-                        }
-                    }, self.scrollingNode);
-                });
-            }
-        },
-
-        move: function(e){
-            var t = this.SUPPORT_TOUCH ? e.touches[0] : e;
-            this.checkScollDirection(t.clientY);
-            //this._lastY = t.clientY;
-            if (this.scrollingNode) {
-                this._scrollY = this.scrollingNode.scrollTop;
-            }
-        },
-
-        release: function(e){
-            var self = this, 
-                t = this.SUPPORT_TOUCH ? e.changedTouches[0] : e,
-                node = { target: self.node };
-            // up/down
-            this.checkScollDirection(t.clientY);
-            // end
-            if (self._scrollY !== null) {
-                var vp = self.scrollingNode,
-                    gap = Math.abs(vp.scrollTop - self._scrollY);
-                if (self._scrollY >= 0 && (self._scrollY <= vp.scrollHeight + vp.offsetHeight)
-                        && (gap && gap < self._config.scrollEndGap)) {
-                    self._started = false;
-                    self.trigger(node, self.event.scrollend);
-                } else {
-                    var tm = self._tm;
-                    self._scrolling = true;
-                    self.once('scroll', function(){
-                        if (tm === self._tm) {
-                            self._scrolling = false;
-                            self._started = false;
-                            self.trigger(node, self.event.scrollend);
-                        }
-                    }, vp);
-                }
-                self._scrollY = null;
-            } else if (self._started) {
-                self._started = false;
-                self.trigger(node, self.event.scrollend);
-            }
-        }
-    
-    });
-
-    function exports(elm, opt, cb){
-        return new exports.Class(elm, opt, cb);
-    }
-
-    exports.Class = MomoScroll;
-
-    return exports;
-
-});
-
-/* @source momo/drag.js */;
-
-
-define('momo/drag', [
-  "mo/lang",
-  "momo/base"
-], function(_, momoBase){
-
-    var MomoDrag = _.construct(momoBase.Class);
-
-    function exports(elm, opt, cb){
-        return new exports.Class(elm, opt, cb);
-    }
-
-    exports.Class = MomoDrag;
-
-    return exports;
-
-});
-
-/* @source momo/tap.js */;
-
-
-define('momo/tap', [
-  "mo/lang",
-  "momo/base"
-], function(_, momoBase){
-
-    var MomoTap = _.construct(momoBase.Class);
-
-    _.mix(MomoTap.prototype, {
-
-        EVENTS: ['tap', 'doubletap', 'hold'],
-        DEFAULT_CONFIG: {
-            'tapRadius': 10,
-            'doubleTimeout': 300,
-            'holdThreshold': 500
-        },
-
-        press: function(e){
-            var t = this.SUPPORT_TOUCH ? e.touches[0] : e;
-            this._startTime = e.timeStamp;
-            this._startTarget = t.target;
-            this._startPosX = t.clientX;
-            this._startPosY = t.clientY;
-            this._movePosX = this._movePosY = this._moveTarget = NaN;
-        },
-
-        move: function(e){
-            var t = this.SUPPORT_TOUCH ? e.touches[0] : e;
-            this._moveTarget = t.target;
-            this._movePosX = t.clientX;
-            this._movePosY = t.clientY;
-        },
-
-        release: function(e){
-            var self = this,
-                tm = e.timeStamp;
-            if (this._moveTarget && this._moveTarget !== this._startTarget 
-                    || Math.abs(self._movePosX - self._startPosX) > self._config.tapRadius
-                    || Math.abs(self._movePosY - self._startPosY) > self._config.tapRadius) {
-                return;
-            }
-            if (tm - self._startTime > self._config.holdThreshold) {
-                self.trigger(e, self.event.hold);
-            } else {
-                if (self._lastTap 
-                        && (tm - self._lastTap < self._config.doubleTimeout)) {
-                    e.preventDefault();
-                    self.trigger(e, self.event.doubletap);
-                    self._lastTap = 0;
-                } else {
-                    self.trigger(e, self.event.tap);
-                    self._lastTap = tm;
-                }
-            }
-        }
-    
-    });
-
-    function exports(elm, opt, cb){
-        return new exports.Class(elm, opt, cb);
-    }
-
-    exports.Class = MomoTap;
 
     return exports;
 
@@ -6869,6 +6850,61 @@ define('soviet', [
 
 });
 
+/* @source mo/easing/timing.js */;
+
+
+define("mo/easing/timing", [
+  "mo/lang/mix",
+  "mo/easing/base"
+], function(_, base){
+
+    // Penner Equations (approximated)
+    // http://matthewlein.com/ceaser/
+    var pos = {
+        'easeInQuad'     :  [0.550, 0.085, 0.680, 0.530],
+        'easeInCubic'    :  [0.550, 0.055, 0.675, 0.190],
+        'easeInQuart'    :  [0.895, 0.030, 0.685, 0.220],
+        'easeInQuint'    :  [0.755, 0.050, 0.855, 0.060],
+        'easeInSine'     :  [0.470, 0.000, 0.745, 0.715],
+        'easeInExpo'     :  [0.950, 0.050, 0.795, 0.035],
+        'easeInCirc'     :  [0.600, 0.040, 0.980, 0.335],
+        'easeInBack'     :  [0.600, -0.280, 0.735, 0.045],
+        'easeOutQuad'    :  [0.250, 0.460, 0.450, 0.940],
+        'easeOutCubic'   :  [0.215, 0.610, 0.355, 1.000],
+        'easeOutQuart'   :  [0.165, 0.840, 0.440, 1.000],
+        'easeOutQuint'   :  [0.230, 1.000, 0.320, 1.000],
+        'easeOutSine'    :  [0.390, 0.575, 0.565, 1.000],
+        'easeOutExpo'    :  [0.190, 1.000, 0.220, 1.000],
+        'easeOutCirc'    :  [0.075, 0.820, 0.165, 1.000],
+        'easeOutBack'    :  [0.175, 0.885, 0.320, 1.275],
+        'easeInOutQuad'  :  [0.455, 0.030, 0.515, 0.955],
+        'easeInOutCubic' :  [0.645, 0.045, 0.355, 1.000],
+        'easeInOutQuart' :  [0.770, 0.000, 0.175, 1.000],
+        'easeInOutQuint' :  [0.860, 0.000, 0.070, 1.000],
+        'easeInOutSine'  :  [0.445, 0.050, 0.550, 0.950],
+        'easeInOutExpo'  :  [1.000, 0.000, 0.000, 1.000],
+        'easeInOutCirc'  :  [0.785, 0.135, 0.150, 0.860],
+        'easeInOutBack'  :  [0.680, -0.550, 0.265, 1.550]
+    };
+
+    function stringify(pos, values){
+        values = values || {};
+        for (var i in pos) {
+            values[i] = 'cubic-bezier(' + pos[i].join(',') + ')';
+        }
+        return values;
+    }
+
+    pos.swing = pos.jswing = base.positions.ease;
+
+    return {
+        positions: _.mix(pos, base.positions),
+        values: _.mix(stringify(pos), base.values),
+        stringify: stringify
+    };
+
+});
+
 /* @source ../cardkit/app.js */;
 
 define("../cardkit/app", [
@@ -6876,6 +6912,7 @@ define("../cardkit/app", [
   "mo/lang",
   "mo/browsers",
   "mo/template",
+  "mo/easing/timing",
   "soviet",
   "choreo",
   "momo/base",
@@ -6889,15 +6926,14 @@ define("../cardkit/app", [
   "../cardkit/view/modalcard",
   "../cardkit/view/actionview",
   "../cardkit/view/growl",
-  "../cardkit/view/slidelist",
   "../cardkit/bus",
   "../cardkit/render",
   "../cardkit/supports",
   "cardkit/env",
   "mo/domready"
-], function($, _, browsers, tpl, soviet, choreo, 
+], function($, _, browsers, tpl, easing, soviet, choreo, 
     momoBase, momoTap, momoSwipe, momoDrag, momoScroll, 
-    control, picker, stars, modalCard, actionView, growl, slidelist,
+    control, picker, stars, modalCard, actionView, growl,
     bus, render, supports, env){
 
     var window = this,
@@ -6909,6 +6945,9 @@ define("../cardkit/app", [
         last_view_for_modal,
         last_view_for_actions,
         gc_id = 0,
+
+        MINI_ITEM_MARGIN = 10,
+        MINI_LIST_PADDING = 15,
 
         TPL_MASK = '<div class="ck-viewmask"></div>',
         TPL_CARD_MASK = '<div class="ck-cardmask"></div>';
@@ -6933,6 +6972,10 @@ define("../cardkit/app", [
         'a': link_handler,
         'a *': link_handler,
 
+        //'.ck-link-mask': function(){
+            //clear_active_item_mask(ck.viewport);
+        //},
+        
         '.ck-card .ck-post-link': handle_control,
 
         '.ck-card .ck-post-button': handle_control,
@@ -6950,11 +6993,13 @@ define("../cardkit/app", [
             toggle_control.call(this);
         },
 
-        '.ck-segment .ck-option': function(){
-            var p = picker(this.parentNode, {
-                ignoreRepeat: true
-            });
-            p.select(this);
+        '.ck-segment .ck-option, .ck-segment .ck-option span': function(){
+            var btn = $(this);
+            if (!btn.hasClass('ck-option')) {
+                btn = btn.closest('.ck-option');
+            }
+            var p = picker(btn.parent());
+            p.select(btn);
         },
 
         '.ck-tagselector .ck-option': function(){
@@ -6974,12 +7019,16 @@ define("../cardkit/app", [
             control(this.parentNode).toggle();
         },
 
-        '.ck-select, .ck-select span': function(){
+        '.ck-select, .ck-select span, .ck-select .enabled': function(){
             var me = $(this);
             if (!me.hasClass('ck-select')) {
                 me = me.parent();
             }
-            return show_actions(me);
+            var p = picker(me);
+            show_actions(me);
+            bus.bind('actionView:confirmOnThis', function(actions){
+                p.select(actions.val());
+            });
         },
 
         '.ck-actions-button, .ck-actions-button span': function(){
@@ -6987,7 +7036,7 @@ define("../cardkit/app", [
             if (!me.hasClass('ck-actions-button')) {
                 me = me.parent();
             }
-            return show_actions(me);
+            show_actions(me);
         },
 
         '.ck-modal-button': open_modal_card,
@@ -7036,10 +7085,12 @@ define("../cardkit/app", [
     }
 
     function handle_control(){
-        var controller = control(this);
-        if (!controller.isEnabled) {
+        var controller = control(this),
+            cfg = controller.data();
+        if (cfg.disableUrl || cfg.disableJsonUrl) {
+            controller.toggle();
+        } else if (!controller.isEnabled) {
             controller.enable();
-            mark_gc(controller);
         }
     } 
 
@@ -7055,7 +7106,7 @@ define("../cardkit/app", [
             multiselect: false
         }, me.data());
         opt.options = $(opt.options || '.ck-option', me);
-        actionView(me, opt).open();
+        return actionView(me, opt).open();
     }
 
     function respond_stars(e, method) {
@@ -7166,6 +7217,7 @@ define("../cardkit/app", [
         ck.disableView = true;
         var current = actionCard._wrapper;
         last_view_for_actions = ck.viewport;
+        current[0].scrollTop = 0;
         ck.changeView(current, {
             preventRender: true,
             isActions: true
@@ -7221,27 +7273,39 @@ define("../cardkit/app", [
             }
             this.controlMask = $(TPL_MASK).appendTo(body);
             if (env.showControlMask) {
-                //this.controlMask.css({
-                    //'opacity': '0.2',
-                    //'background': '#0f0'
-                //});
+                this.controlMask.css({
+                    'opacity': '0.2',
+                    'background': '#0f0'
+                });
             }
             this.cardMask = $(TPL_CARD_MASK).appendTo(body);
             this.headerHeight = this.header.height();
             this.sizeInited = false;
             this.viewportGarbage = {};
             this.sessionLocked = true;
+
             this.initWindow();
 
             if (env.enableConsole) {
-                console.info(supports);
-                console.info(browsers);
+                console.info('Features:', supports);
+                console.info('Platform:', browsers);
             }
+
+            choreo.config({
+                easing: easing
+            });
 
             this.scrollGesture = momoScroll(document);
             momoTap(document);
+            momoSwipe(this.wrapper, {
+                'timeThreshold': 10000,
+                'distanceThreshold': 10 
+            });
 
             if (!supports.CARD_SCROLL) {
+                $(body).addClass('no-cardscroll');
+            }
+            if (!supports.SAFARI_OVERFLOWSCROLL) {
                 $(body).addClass('no-overflowscroll');
             }
             if (supports.HIDE_TOPBAR) {
@@ -7253,6 +7317,7 @@ define("../cardkit/app", [
                 ck.hideAddressbar();
                 ck.hideLoadingCard();
                 ck.enableControl();
+                ck.sessionLocked = false;
             }, 0);
 
             $(window).bind('resize', function(){
@@ -7277,7 +7342,15 @@ define("../cardkit/app", [
             }).on('click', {
                 'a': nothing,
                 'a *': nothing
-            }).on('tap', tap_events).on('touchend', {
+            //}).on('tapstart', {
+                //'.ck-link-mask': function(){
+                    //$(this).addClass('ck-link-mask-active');
+                //}
+            //}).on('tapcancel', {
+                //'.ck-link-mask': function(){
+                    //clear_active_item_mask(ck.viewport);
+                //}
+            }).on('touchend', {
                 '.ck-stars': function(e) {
                     respond_stars.call(this, e, 'val');
                 },
@@ -7291,7 +7364,7 @@ define("../cardkit/app", [
                 '.ck-stars .slider-selected': function(e) {
                     respond_stars.call(this.parentNode, e, 'pretend');
                 }
-            });
+            }).on('tap', tap_events);
 
             doc.bind('scrolldown', function(){
                 if (topbar_holded) {
@@ -7310,6 +7383,28 @@ define("../cardkit/app", [
                 //ck.showTopbar();
             });
             
+            var wrapper_delegate = soviet(this.wrapper, {
+                matchesSelector: true
+            }).on('swipeleft', {
+                '.ck-mini-unit .ck-list-wrap *': function(){
+                    stick_item.call(this, true);
+                }
+            }).on('swiperight', {
+                '.ck-mini-unit .ck-list-wrap *': function(){
+                    stick_item.call(this, false);
+                }
+            });
+
+            if (!supports.SAFARI_OVERFLOWSCROLL) {
+
+                wrapper_delegate.on('touchend', {
+                    '.ck-mini-unit .ck-list-wrap *': function(e){
+                        e.preventDefault();
+                    }
+                });
+
+            }
+
             if (supports.CARD_SCROLL 
                     && supports.SAFARI_OVERFLOWSCROLL) {
 
@@ -7317,7 +7412,6 @@ define("../cardkit/app", [
                     ck.scrollMask.show();
                 }).bind('scrollend', function(){
                     ck.scrollMask.hide();
-                    prevent_window_scroll();
                 });
 
                 doc.bind('touchstart', prevent_window_scroll);
@@ -7367,7 +7461,7 @@ define("../cardkit/app", [
                         topbar_holded = true;
                         ck.viewport[0].scrollTop = 0;
                         topbar_tips.open();
-                    }, 200);
+                    }, 510);
                 }).bind('touchmove', function(e){
                     clearTimeout(hold_timer);
                     if (topbar_holded && e.touches[0].clientY < startY) {
@@ -7388,8 +7482,6 @@ define("../cardkit/app", [
         },
 
         initState: function(){
-
-            ck.sessionLocked = false;
 
             var travel_history, restore_state, restore_modal;
 
@@ -7482,8 +7574,13 @@ define("../cardkit/app", [
                 // 1. reload from normal card.  alert(1)
                 ck.changeView(restore_state);
                 if (restore_state === 'ckLoading') {
-                    // 9.  alert(9)
-                    history.back();
+                    if (document.referrer === location.href) {
+                        // alert(9.1)
+                        ck.changeView(ck.defaultCard);
+                    } else {
+                        // 9.  alert(9)
+                        history.back();
+                    }
                 } else if (restore_modal && !modalCard.isOpened) {
                     modalCard.set(history.state.opt).open();
                 }
@@ -7511,35 +7608,30 @@ define("../cardkit/app", [
         },
 
         initView: function(card, opt){
+            render.openCard(card, opt);
             if (!card.data('rendered') && !opt.preventRender) {
                 render.initCard(card, this.raw, this.footer, opt);
                 if (!opt.isModal && !opt.isActions) {
                     card.data('rendered', '1');
                 }
-                card.find('.ck-mini-unit').forEach(function(unit){
-                    var slide = $('.ck-inslide', unit);
-                    if (slide[0]) {
-                        var pagers = $('.ck-page span', unit);
-                        slidelist(slide).event.bind('change', function(n){
-                            pagers.removeClass('enable');
-                            pagers.eq(n).addClass('enable');
-                        });
-                    }
-                });
             }
             this.watchScroll(card);
+            //clear_active_item_mask(card);
         },
 
-        releaseView: function(){
-            control.gc(check_gc);
-            picker.gc(check_gc);
-            this.viewportGarbage = {};
-            gc_id = 0;
+        releaseView: function(opt){
+            //control.gc(check_gc);
+            //picker.gc(check_gc);
+            //this.viewportGarbage = {};
+            //gc_id = 0;
+            if (this.viewport) {
+                render.closeCard(this.viewport, opt);
+            }
         },
 
         changeView: function(card, opt){
             opt = opt || {};
-            //this.releaseView(); // @TODO release when modal open
+            this.releaseView(opt);
             if (typeof card === 'string') {
                 card = $('#' + card);
             }
@@ -7562,12 +7654,15 @@ define("../cardkit/app", [
 
         updateSize: function(opt){
             opt = opt || {};
+
             if (supports.CARD_SCROLL || opt.isActions) {
+
                 this.viewport[0].style.height = (this.sizeInited ? 
                     window.innerHeight : (screen.availHeight + 60)) + 2 + 'px';
+
                 // enable scrollable when height is not enough 
                 var ft = this.viewport.find('.ck-footer'),
-                    last_unit = ft && ft.prev()[0];
+                    last_unit = find_last_unit(ft);
                 if (last_unit) {
                     var d = screen.availHeight - (last_unit.offsetTop + last_unit.offsetHeight + this.viewport[0].scrollTop);
                     if (d > 0) {
@@ -7577,6 +7672,16 @@ define("../cardkit/app", [
                     }
                 }
             }
+
+            this.viewport.find('.ck-mini-unit').forEach(function(mini){
+                var mini_items = this('.ck-item', mini),
+                    w = ck.slideItemWidth = window.innerWidth - MINI_ITEM_MARGIN - MINI_LIST_PADDING;
+                if (mini_items.length > 1) {
+                    mini_items.css('width', w - MINI_ITEM_MARGIN - 2 + 'px');
+                    this('.ck-list', mini).css('width', w * mini_items.length + MINI_ITEM_MARGIN + 'px');
+                }
+            }, $);
+
             bus.fire('cardkit:updateSize');
         },
 
@@ -7597,20 +7702,11 @@ define("../cardkit/app", [
         },
 
         hideLoadingCard: function() {
-            if (!this._loadingAnimate) {
-                this._loadingAnimate = choreo();
-            }
-            this._loadingAnimate.clear().play()
-                .actor(ck.loadingCard[0], {
-                    opacity: 0
-                }, 400, 'ease').follow().then(function(){
-                    ck.loadingCard.hide().css({
-                        position: 'static',
-                        opacity: '',
-                        height: window.innerHeight + 'px'
-                    });
-                    ck.showTopbar();
-                });
+            ck.loadingCard.hide().css({
+                position: 'static',
+                height: window.innerHeight + 'px'
+            });
+            ck.showTopbar();
         },
 
         hideTopbar: function(){
@@ -7745,6 +7841,49 @@ define("../cardkit/app", [
 
     function nothing(){}
 
+    function stick_item(is_forward){
+        var self = $(this).closest('.ck-list-wrap'),
+            aid = self.data('ckSlideAnime');
+        if (!aid) {
+            aid = self.data('ckSlideAnime', +new Date());
+        }
+        var w = ck.slideItemWidth,
+            x = self[0].scrollLeft,
+            n = x / w,
+            pos = n - Math.floor(n),
+            list = $('.ck-list', self)[0],
+            l = $('.ck-item', list).length - 1;
+        if (n > 0 && n < l) {
+            if (is_forward) {
+                if (pos < 0.1) {
+                    n = Math.floor(n);
+                } else {
+                    n = Math.ceil(n);
+                }
+            } else {
+                if (pos > 0.9) {
+                    n = Math.ceil(n);
+                } else {
+                    n = Math.floor(n);
+                }
+            }
+            var d = x - n * w 
+                + (n === l ? MINI_LIST_PADDING : 0);
+            self.addClass('stop-scroll');
+            choreo(aid).clear().play().actor(list, {
+                transform: 'translateX(' + d + 'px)'
+            }, 200, 'easeOutSine').follow().then(function(){
+                choreo.transform(list, 'translateX', '0');
+                self[0].scrollLeft -= d;
+                self.removeClass('stop-scroll');
+            });
+        }
+    }
+
+    //function clear_active_item_mask(card){
+        //card.find('.ck-link-mask-active').removeClass('ck-link-mask-active');
+    //}
+
     function link_handler(next_id, true_link){
         if (modalCard.isOpened) {
             modalCard.event.once('close', function(){
@@ -7760,7 +7899,12 @@ define("../cardkit/app", [
             while (!me.href) {
                 me = me.parentNode;
             }
-            if ($(me).hasClass('ck-link')) {
+            if ($(me).hasClass('ck-link-extern')) {
+                open_url(me.href, {
+                    target: '_blank'
+                });
+                return;
+            } else if ($(me).hasClass('ck-link')) {
                 next_id = (me.href.replace(location.href, '')
                     .match(/^#(.+)/) || [])[1];
             } else if (/(^|\s)ck-\w+/.test(me.className)) {
@@ -7810,13 +7954,14 @@ define("../cardkit/app", [
         next.addClass('moving');
         ck.changeView(next);
         ck.cardMask.css('opacity', 0).addClass('moving');
-        var moving = choreo().play();
+        var moving = choreo('card:moving').clear().play();
         moving.actor(ck.cardMask[0], {
-            'opacity': '1'
-        }, 350, 'ease');
+            'opacity': '0.8'
+        }, 400, 'ease');
         moving.actor(next[0], {
             'transform': 'translateX(0)'
-        }, 400, 'ease').follow().done(function(){
+        }, 450, 'ease');
+        moving.follow().then(function(){
             current.hide();
             ck.cardMask.removeClass('moving');
             next.removeClass('moving');
@@ -7855,14 +8000,15 @@ define("../cardkit/app", [
         choreo.transform(current[0], 'translateX', '0px');
         current.addClass('moving');
         ck.changeView(prev);
-        ck.cardMask.css('opacity', '1').addClass('moving');
-        var moving = choreo().play();
+        ck.cardMask.css('opacity', '0.8').addClass('moving');
+        var moving = choreo('card:moving').clear().play();
         moving.actor(ck.cardMask[0], {
             'opacity': '0'
-        }, 350, 'ease');
-        moving.play().actor(current[0], {
+        }, 400, 'ease');
+        moving.actor(current[0], {
             'transform': 'translateX(' + window.innerWidth + 'px)'
-        }, 400, 'ease').follow().done(function(){
+        }, 450, 'ease');
+        moving.follow().then(function(){
             ck.cardMask.removeClass('moving');
             current.hide().removeClass('moving');
             choreo.transform(current[0], 'translateX', '0px');
@@ -7870,9 +8016,6 @@ define("../cardkit/app", [
             ck.sessionLocked = false;
             if (prev_id === 'ckLoading') {
                 history.back();
-                if (!document.referrer || document.referrer === location.href) {
-                    location.reload(true);
-                }
             } else {
                 ck.showTopbar();
             }
@@ -8023,9 +8166,17 @@ define("../cardkit/app", [
         }
     }
 
-    function check_gc(controller){
-        return ck.viewportGarbage[controller.parentId];
+    function find_last_unit(ft){
+        var last_unit = ft && ft.prev()[0];
+        if (last_unit && !last_unit.offsetHeight) {
+            return find_last_unit($(last_unit));
+        }
+        return last_unit;
     }
+
+    //function check_gc(controller){
+        //return ck.viewportGarbage[controller.parentId];
+    //}
 
     function enable_control(){}
 
@@ -8065,16 +8216,22 @@ define('cardkit/pageready', [
 
 require([
     'dollar', 
+    'cardkit/bus',
     'cardkit/app',
     'cardkit/env'
-], function($, app, env){
+], function($, bus, app, env){
 
     if (env.enableConsole) {
-        require(['mo/console'], function(console){
+        require([
+            'mo/console'
+        ], function(console){
+
             console.config({
-                output: $('#console')[0]
+                record: true
             }).enable();
+
             init();
+
         });
     } else {
         init();

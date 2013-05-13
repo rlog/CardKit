@@ -5,6 +5,10 @@ define([
     './util'
 ], function($, _, util){
     
+    var getCustom = util.getCustom,
+        getHd = util.getHd,
+        getItemDataOuter = util.getItemDataOuter;
+
     function exports(unit, raw){
         unit = $(unit);
         var source = util.getSource(unit, raw),
@@ -13,23 +17,32 @@ define([
                 plain: unit.data('cfgPlain'),
                 plainhd: unit.data('cfgPlainhd')
             },
-            hd = get_hd(source && source.find('.ckd-hd')),
-            hd_opt = get_all_outer(source && source.find('.ckd-hdopt')),
-            ft = get_hd(source && source.find('.ckd-ft')),
-            contents = source && (
-                util.getOuterHTML(source.find('.ckd-content'))
-                || util.getInnerHTML(source)
-            ),
-            custom_hd = (util.getCustom('.ckd-hd', unit, raw, get_hd) || [{}])[0],
-            custom_hd_opt = (util.getCustom('.ckd-hdopt', unit, raw, get_all_outer) || []).join(''),
-            custom_ft = (util.getCustom('.ckd-ft', unit, raw, get_hd) || [{}])[0];
-        util.getCustom('.ckd-content', unit, raw, replace_content);
+            hd = getHd(source && source.find('.ckd-hd')),
+            hd_link_extern = getHd(source && source.find('.ckd-hd-link-extern')),
+            hd_link = hd_link_extern.href 
+                ? hd_link_extern
+                : getHd(source && source.find('.ckd-hd-link')),
+            hd_opt = getItemDataOuter(source && source.find('.ckd-hdopt'), 'hdopt'),
+            ft = getHd(source && source.find('.ckd-ft')),
+            contents = source && util.getOuterHTML(source.find('.ckd-content')),
+            custom_hd = getCustom('.ckd-hd', unit, raw, take_hd)[0] || {},
+            custom_hd_link_extern = getCustom('.ckd-hd-link-extern', unit, raw, take_hd)[0] || {},
+            custom_hd_link = custom_hd_link_extern.href 
+                ? custom_hd_link_extern
+                : (getCustom('.ckd-hd-link', unit, raw, take_hd)[0] || {}),
+            custom_hd_opt = getCustom('.ckd-hdopt', unit, raw, take_item_outer, 'hdopt').join(''),
+            custom_ft = getCustom('.ckd-ft', unit, raw, take_hd)[0] || {};
+        getCustom('.ckd-content', unit, raw, replace_content);
         var data = {
             config: config,
             style: unit.data('style'),
             content: unit[0].innerHTML + (contents || ''),
             hd: custom_hd.html === undefined ? hd.html : custom_hd.html,
-            hd_url: custom_hd.href || custom_hd.href !== null && hd.href,
+            hd_url: custom_hd_link.href 
+                || custom_hd_link.href !== null && hd_link.href 
+                || custom_hd.href 
+                || custom_hd.href !== null && hd.href,
+            hd_url_extern: custom_hd_link_extern.href || hd_link_extern.href,
             hd_opt: custom_hd_opt + hd_opt,
             ft: custom_ft.html === undefined ? ft.html 
                 : (custom_ft.html || (config.plain || config.paper) && ' ')
@@ -46,28 +59,15 @@ define([
         }
     }
 
-    function get_hd(source, custom_source){
-        source = $(source);
-        var data = source && {
-            html: util.getInnerHTML(source),
-            href: util.getHref(source)
-        } || {};
-        if (custom_source && typeof custom_source === 'object') {
-            var custom_data = get_hd(custom_source);
-            for (var i in custom_data) {
-                if (custom_data[i]) {
-                    data[i] = custom_data[i];
-                }
-            }
-        }
-        source.remove();
+    function take_hd(source, custom){
+        var data = getHd(source, custom);
+        $(source).remove();
         return data;
     }
 
-    function get_all_outer(source){
-        source = $(source);
-        var data = util.getOuterHTML(source) || '';
-        source.remove();
+    function take_item_outer(source, custom, ckdname){
+        var data = getItemDataOuter(source, custom, ckdname);
+        $(source).remove();
         return data;
     }
 

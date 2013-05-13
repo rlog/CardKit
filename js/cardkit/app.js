@@ -3,6 +3,7 @@ define([
     'mo/lang',
     'mo/browsers',
     'mo/template',
+    'mo/easing/timing',
     'soviet',
     'choreo',
     'momo/base',
@@ -16,15 +17,14 @@ define([
     './view/modalcard',
     './view/actionview',
     './view/growl',
-    './view/slidelist',
     './bus',
     './render',
     './supports',
     'cardkit/env',
     'mo/domready'
-], function($, _, browsers, tpl, soviet, choreo, 
+], function($, _, browsers, tpl, easing, soviet, choreo, 
     momoBase, momoTap, momoSwipe, momoDrag, momoScroll, 
-    control, picker, stars, modalCard, actionView, growl, slidelist,
+    control, picker, stars, modalCard, actionView, growl,
     bus, render, supports, env){
 
     var window = this,
@@ -36,6 +36,9 @@ define([
         last_view_for_modal,
         last_view_for_actions,
         gc_id = 0,
+
+        MINI_ITEM_MARGIN = 10,
+        MINI_LIST_PADDING = 15,
 
         TPL_MASK = '<div class="ck-viewmask"></div>',
         TPL_CARD_MASK = '<div class="ck-cardmask"></div>';
@@ -60,6 +63,10 @@ define([
         'a': link_handler,
         'a *': link_handler,
 
+        //'.ck-link-mask': function(){
+            //clear_active_item_mask(ck.viewport);
+        //},
+        
         '.ck-card .ck-post-link': handle_control,
 
         '.ck-card .ck-post-button': handle_control,
@@ -77,11 +84,13 @@ define([
             toggle_control.call(this);
         },
 
-        '.ck-segment .ck-option': function(){
-            var p = picker(this.parentNode, {
-                ignoreRepeat: true
-            });
-            p.select(this);
+        '.ck-segment .ck-option, .ck-segment .ck-option span': function(){
+            var btn = $(this);
+            if (!btn.hasClass('ck-option')) {
+                btn = btn.closest('.ck-option');
+            }
+            var p = picker(btn.parent());
+            p.select(btn);
         },
 
         '.ck-tagselector .ck-option': function(){
@@ -101,12 +110,16 @@ define([
             control(this.parentNode).toggle();
         },
 
-        '.ck-select, .ck-select span': function(){
+        '.ck-select, .ck-select span, .ck-select .enabled': function(){
             var me = $(this);
             if (!me.hasClass('ck-select')) {
                 me = me.parent();
             }
-            return show_actions(me);
+            var p = picker(me);
+            show_actions(me);
+            bus.bind('actionView:confirmOnThis', function(actions){
+                p.select(actions.val());
+            });
         },
 
         '.ck-actions-button, .ck-actions-button span': function(){
@@ -114,7 +127,7 @@ define([
             if (!me.hasClass('ck-actions-button')) {
                 me = me.parent();
             }
-            return show_actions(me);
+            show_actions(me);
         },
 
         '.ck-modal-button': open_modal_card,
@@ -163,10 +176,12 @@ define([
     }
 
     function handle_control(){
-        var controller = control(this);
-        if (!controller.isEnabled) {
+        var controller = control(this),
+            cfg = controller.data();
+        if (cfg.disableUrl || cfg.disableJsonUrl) {
+            controller.toggle();
+        } else if (!controller.isEnabled) {
             controller.enable();
-            mark_gc(controller);
         }
     } 
 
@@ -182,7 +197,7 @@ define([
             multiselect: false
         }, me.data());
         opt.options = $(opt.options || '.ck-option', me);
-        actionView(me, opt).open();
+        return actionView(me, opt).open();
     }
 
     function respond_stars(e, method) {
@@ -293,6 +308,7 @@ define([
         ck.disableView = true;
         var current = actionCard._wrapper;
         last_view_for_actions = ck.viewport;
+        current[0].scrollTop = 0;
         ck.changeView(current, {
             preventRender: true,
             isActions: true
@@ -348,27 +364,39 @@ define([
             }
             this.controlMask = $(TPL_MASK).appendTo(body);
             if (env.showControlMask) {
-                //this.controlMask.css({
-                    //'opacity': '0.2',
-                    //'background': '#0f0'
-                //});
+                this.controlMask.css({
+                    'opacity': '0.2',
+                    'background': '#0f0'
+                });
             }
             this.cardMask = $(TPL_CARD_MASK).appendTo(body);
             this.headerHeight = this.header.height();
             this.sizeInited = false;
             this.viewportGarbage = {};
             this.sessionLocked = true;
+
             this.initWindow();
 
             if (env.enableConsole) {
-                console.info(supports);
-                console.info(browsers);
+                console.info('Features:', supports);
+                console.info('Platform:', browsers);
             }
+
+            choreo.config({
+                easing: easing
+            });
 
             this.scrollGesture = momoScroll(document);
             momoTap(document);
+            momoSwipe(this.wrapper, {
+                'timeThreshold': 10000,
+                'distanceThreshold': 10 
+            });
 
             if (!supports.CARD_SCROLL) {
+                $(body).addClass('no-cardscroll');
+            }
+            if (!supports.SAFARI_OVERFLOWSCROLL) {
                 $(body).addClass('no-overflowscroll');
             }
             if (supports.HIDE_TOPBAR) {
@@ -380,6 +408,7 @@ define([
                 ck.hideAddressbar();
                 ck.hideLoadingCard();
                 ck.enableControl();
+                ck.sessionLocked = false;
             }, 0);
 
             $(window).bind('resize', function(){
@@ -404,7 +433,15 @@ define([
             }).on('click', {
                 'a': nothing,
                 'a *': nothing
-            }).on('tap', tap_events).on('touchend', {
+            //}).on('tapstart', {
+                //'.ck-link-mask': function(){
+                    //$(this).addClass('ck-link-mask-active');
+                //}
+            //}).on('tapcancel', {
+                //'.ck-link-mask': function(){
+                    //clear_active_item_mask(ck.viewport);
+                //}
+            }).on('touchend', {
                 '.ck-stars': function(e) {
                     respond_stars.call(this, e, 'val');
                 },
@@ -418,7 +455,7 @@ define([
                 '.ck-stars .slider-selected': function(e) {
                     respond_stars.call(this.parentNode, e, 'pretend');
                 }
-            });
+            }).on('tap', tap_events);
 
             doc.bind('scrolldown', function(){
                 if (topbar_holded) {
@@ -437,6 +474,28 @@ define([
                 //ck.showTopbar();
             });
             
+            var wrapper_delegate = soviet(this.wrapper, {
+                matchesSelector: true
+            }).on('swipeleft', {
+                '.ck-mini-unit .ck-list-wrap *': function(){
+                    stick_item.call(this, true);
+                }
+            }).on('swiperight', {
+                '.ck-mini-unit .ck-list-wrap *': function(){
+                    stick_item.call(this, false);
+                }
+            });
+
+            if (!supports.SAFARI_OVERFLOWSCROLL) {
+
+                wrapper_delegate.on('touchend', {
+                    '.ck-mini-unit .ck-list-wrap *': function(e){
+                        e.preventDefault();
+                    }
+                });
+
+            }
+
             if (supports.CARD_SCROLL 
                     && supports.SAFARI_OVERFLOWSCROLL) {
 
@@ -444,7 +503,6 @@ define([
                     ck.scrollMask.show();
                 }).bind('scrollend', function(){
                     ck.scrollMask.hide();
-                    prevent_window_scroll();
                 });
 
                 doc.bind('touchstart', prevent_window_scroll);
@@ -494,7 +552,7 @@ define([
                         topbar_holded = true;
                         ck.viewport[0].scrollTop = 0;
                         topbar_tips.open();
-                    }, 200);
+                    }, 510);
                 }).bind('touchmove', function(e){
                     clearTimeout(hold_timer);
                     if (topbar_holded && e.touches[0].clientY < startY) {
@@ -515,8 +573,6 @@ define([
         },
 
         initState: function(){
-
-            ck.sessionLocked = false;
 
             var travel_history, restore_state, restore_modal;
 
@@ -609,8 +665,13 @@ define([
                 // 1. reload from normal card.  alert(1)
                 ck.changeView(restore_state);
                 if (restore_state === 'ckLoading') {
-                    // 9.  alert(9)
-                    history.back();
+                    if (document.referrer === location.href) {
+                        // alert(9.1)
+                        ck.changeView(ck.defaultCard);
+                    } else {
+                        // 9.  alert(9)
+                        history.back();
+                    }
                 } else if (restore_modal && !modalCard.isOpened) {
                     modalCard.set(history.state.opt).open();
                 }
@@ -638,35 +699,30 @@ define([
         },
 
         initView: function(card, opt){
+            render.openCard(card, opt);
             if (!card.data('rendered') && !opt.preventRender) {
                 render.initCard(card, this.raw, this.footer, opt);
                 if (!opt.isModal && !opt.isActions) {
                     card.data('rendered', '1');
                 }
-                card.find('.ck-mini-unit').forEach(function(unit){
-                    var slide = $('.ck-inslide', unit);
-                    if (slide[0]) {
-                        var pagers = $('.ck-page span', unit);
-                        slidelist(slide).event.bind('change', function(n){
-                            pagers.removeClass('enable');
-                            pagers.eq(n).addClass('enable');
-                        });
-                    }
-                });
             }
             this.watchScroll(card);
+            //clear_active_item_mask(card);
         },
 
-        releaseView: function(){
-            control.gc(check_gc);
-            picker.gc(check_gc);
-            this.viewportGarbage = {};
-            gc_id = 0;
+        releaseView: function(opt){
+            //control.gc(check_gc);
+            //picker.gc(check_gc);
+            //this.viewportGarbage = {};
+            //gc_id = 0;
+            if (this.viewport) {
+                render.closeCard(this.viewport, opt);
+            }
         },
 
         changeView: function(card, opt){
             opt = opt || {};
-            //this.releaseView(); // @TODO release when modal open
+            this.releaseView(opt);
             if (typeof card === 'string') {
                 card = $('#' + card);
             }
@@ -689,12 +745,15 @@ define([
 
         updateSize: function(opt){
             opt = opt || {};
+
             if (supports.CARD_SCROLL || opt.isActions) {
+
                 this.viewport[0].style.height = (this.sizeInited ? 
                     window.innerHeight : (screen.availHeight + 60)) + 2 + 'px';
+
                 // enable scrollable when height is not enough 
                 var ft = this.viewport.find('.ck-footer'),
-                    last_unit = ft && ft.prev()[0];
+                    last_unit = find_last_unit(ft);
                 if (last_unit) {
                     var d = screen.availHeight - (last_unit.offsetTop + last_unit.offsetHeight + this.viewport[0].scrollTop);
                     if (d > 0) {
@@ -704,6 +763,16 @@ define([
                     }
                 }
             }
+
+            this.viewport.find('.ck-mini-unit').forEach(function(mini){
+                var mini_items = this('.ck-item', mini),
+                    w = ck.slideItemWidth = window.innerWidth - MINI_ITEM_MARGIN - MINI_LIST_PADDING;
+                if (mini_items.length > 1) {
+                    mini_items.css('width', w - MINI_ITEM_MARGIN - 2 + 'px');
+                    this('.ck-list', mini).css('width', w * mini_items.length + MINI_ITEM_MARGIN + 'px');
+                }
+            }, $);
+
             bus.fire('cardkit:updateSize');
         },
 
@@ -724,20 +793,11 @@ define([
         },
 
         hideLoadingCard: function() {
-            if (!this._loadingAnimate) {
-                this._loadingAnimate = choreo();
-            }
-            this._loadingAnimate.clear().play()
-                .actor(ck.loadingCard[0], {
-                    opacity: 0
-                }, 400, 'ease').follow().then(function(){
-                    ck.loadingCard.hide().css({
-                        position: 'static',
-                        opacity: '',
-                        height: window.innerHeight + 'px'
-                    });
-                    ck.showTopbar();
-                });
+            ck.loadingCard.hide().css({
+                position: 'static',
+                height: window.innerHeight + 'px'
+            });
+            ck.showTopbar();
         },
 
         hideTopbar: function(){
@@ -872,6 +932,49 @@ define([
 
     function nothing(){}
 
+    function stick_item(is_forward){
+        var self = $(this).closest('.ck-list-wrap'),
+            aid = self.data('ckSlideAnime');
+        if (!aid) {
+            aid = self.data('ckSlideAnime', +new Date());
+        }
+        var w = ck.slideItemWidth,
+            x = self[0].scrollLeft,
+            n = x / w,
+            pos = n - Math.floor(n),
+            list = $('.ck-list', self)[0],
+            l = $('.ck-item', list).length - 1;
+        if (n > 0 && n < l) {
+            if (is_forward) {
+                if (pos < 0.1) {
+                    n = Math.floor(n);
+                } else {
+                    n = Math.ceil(n);
+                }
+            } else {
+                if (pos > 0.9) {
+                    n = Math.ceil(n);
+                } else {
+                    n = Math.floor(n);
+                }
+            }
+            var d = x - n * w 
+                + (n === l ? MINI_LIST_PADDING : 0);
+            self.addClass('stop-scroll');
+            choreo(aid).clear().play().actor(list, {
+                transform: 'translateX(' + d + 'px)'
+            }, 200, 'easeOutSine').follow().then(function(){
+                choreo.transform(list, 'translateX', '0');
+                self[0].scrollLeft -= d;
+                self.removeClass('stop-scroll');
+            });
+        }
+    }
+
+    //function clear_active_item_mask(card){
+        //card.find('.ck-link-mask-active').removeClass('ck-link-mask-active');
+    //}
+
     function link_handler(next_id, true_link){
         if (modalCard.isOpened) {
             modalCard.event.once('close', function(){
@@ -887,7 +990,12 @@ define([
             while (!me.href) {
                 me = me.parentNode;
             }
-            if ($(me).hasClass('ck-link')) {
+            if ($(me).hasClass('ck-link-extern')) {
+                open_url(me.href, {
+                    target: '_blank'
+                });
+                return;
+            } else if ($(me).hasClass('ck-link')) {
                 next_id = (me.href.replace(location.href, '')
                     .match(/^#(.+)/) || [])[1];
             } else if (/(^|\s)ck-\w+/.test(me.className)) {
@@ -937,13 +1045,14 @@ define([
         next.addClass('moving');
         ck.changeView(next);
         ck.cardMask.css('opacity', 0).addClass('moving');
-        var moving = choreo().play();
+        var moving = choreo('card:moving').clear().play();
         moving.actor(ck.cardMask[0], {
-            'opacity': '1'
-        }, 350, 'ease');
+            'opacity': '0.8'
+        }, 400, 'ease');
         moving.actor(next[0], {
             'transform': 'translateX(0)'
-        }, 400, 'ease').follow().done(function(){
+        }, 450, 'ease');
+        moving.follow().then(function(){
             current.hide();
             ck.cardMask.removeClass('moving');
             next.removeClass('moving');
@@ -982,14 +1091,15 @@ define([
         choreo.transform(current[0], 'translateX', '0px');
         current.addClass('moving');
         ck.changeView(prev);
-        ck.cardMask.css('opacity', '1').addClass('moving');
-        var moving = choreo().play();
+        ck.cardMask.css('opacity', '0.8').addClass('moving');
+        var moving = choreo('card:moving').clear().play();
         moving.actor(ck.cardMask[0], {
             'opacity': '0'
-        }, 350, 'ease');
-        moving.play().actor(current[0], {
+        }, 400, 'ease');
+        moving.actor(current[0], {
             'transform': 'translateX(' + window.innerWidth + 'px)'
-        }, 400, 'ease').follow().done(function(){
+        }, 450, 'ease');
+        moving.follow().then(function(){
             ck.cardMask.removeClass('moving');
             current.hide().removeClass('moving');
             choreo.transform(current[0], 'translateX', '0px');
@@ -997,9 +1107,6 @@ define([
             ck.sessionLocked = false;
             if (prev_id === 'ckLoading') {
                 history.back();
-                if (!document.referrer || document.referrer === location.href) {
-                    location.reload(true);
-                }
             } else {
                 ck.showTopbar();
             }
@@ -1150,9 +1257,17 @@ define([
         }
     }
 
-    function check_gc(controller){
-        return ck.viewportGarbage[controller.parentId];
+    function find_last_unit(ft){
+        var last_unit = ft && ft.prev()[0];
+        if (last_unit && !last_unit.offsetHeight) {
+            return find_last_unit($(last_unit));
+        }
+        return last_unit;
     }
+
+    //function check_gc(controller){
+        //return ck.viewportGarbage[controller.parentId];
+    //}
 
     function enable_control(){}
 

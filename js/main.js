@@ -26,16 +26,22 @@ define('cardkit/pageready', [
 
 require([
     'dollar', 
+    'cardkit/bus',
     'cardkit/app',
     'cardkit/env'
-], function($, app, env){
+], function($, bus, app, env){
 
     if (env.enableConsole) {
-        require(['mo/console'], function(console){
+        require([
+            'mo/console'
+        ], function(console){
+
             console.config({
-                output: $('#console')[0]
+                record: true
             }).enable();
+
             init();
+
         });
     } else {
         init();

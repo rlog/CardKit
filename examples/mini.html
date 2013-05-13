@@ -2,26 +2,30 @@
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
-<title>DEMO & DOCS</title>
+<title>CardKit Reference</title>
 <meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0">
 <meta name="format-detection" content="telephone=no">
 
 <link href="dist/css/main.css" rel="stylesheet">
+<link href="css/shCoreDefault.css" rel="stylesheet">
+<link href="css/console.css" rel="stylesheet">
 <link href="css/common.css" rel="stylesheet">
 <style>
+.ck-list-unit code {
+  text-decoration:underline;
+}
 </style>
 <script>function ckControl(){return false}</script>
 </head>
 <body ontouchstart="return ckControl()">
 
-
 <div class="ck-root">
     
 <header class="ck-header">
     
-<a class="ck-top-title" href="index.html">DEMO & DOCS</a>
-<span class="opt ck-top-nav"><a class="btn" href="/"></a></span>
-<span class="opt ck-top-action"><button class="btn"></button></span>
+<a class="ck-top-title" href="index.html">CardKit Reference</a>
+<span class="opt ck-top-nav"><a class="btn" href="index.html"></a></span>
+<span class="opt ck-top-action"><button type="button" class="btn"></button></span>
 <span class="opt ck-top-create"></span>
 
 </header>
@@ -30,219 +34,110 @@
 
     <div class="ck-card" id="ckDefault">
 
-        <div class="ck-banner-unit topbox">
-            <h2>Mini Unit</h2>
-            <ul class="mods">
-                <li><a href="http://code.dapps.douban.com/cardkit/blob/master/tpl/unit/mini.tpl" target="_blank">tpl/unit/mini</a></li>
-                <li><a href="http://code.dapps.douban.com/cardkit/blob/master/js/cardkit/parser/mini.js" target="_blank">cardkit/parser/mini</a></li>
-            </ul>
-        </div>
 
-        <div class="ck-box-unit" data-cfg-plain="true">
-            <h2 class="ckd-hd">Without <code>data-source</code>:</h2>
-        </div>
-
-        <div class="ck-list-unit" data-style="post">
-            <a href="box.html" class="ckd-hd">This is header</a>
-
-            <a class="ckd-hdopt ck-modal-link" href="#" data-url="formcontent.html">Edit</a>
-
+        <!--demo-->
+        <div class="ck-mini-unit" 
+                data-style="slide">
+            <a class="ckd-hd" href="#hdLink">Mini ("slide" style)</a>
+            <span class="ckd-hdopt" data-source="ckdSelectA"></span>
             <div class="ckd-item">
-
-                <div class="ckd-title-prefix">Before title</div>
-                <a class="ckd-title" href="#title">This is title</a>
-                <div class="ckd-title-suffix">After title</div>
-
-                <div class="ckd-titletag">tag1</div>
-                <div class="ckd-titletag">tag2</div>
-
-                <div><img class="ckd-icon" src="http://img3.douban.com/view/photo/photo/public/p1702376626.jpg"></div>
-
-                <div class="ckd-subtitle">This is subtitle or desc</div>
-                <div class="ckd-info">some info</div>
-
-                <div class="ckd-content">This is content</div>
-                <div class="ckd-meta">This is meta</div>
-
-                <div class="ckd-author-prefix">Before author</div>
-                <a class="ckd-author" href="#author">This is author</a>
-                <div class="ckd-author-suffix">After author</div>
-
-                <div><img class="ckd-avatar" src="http://img3.douban.com/icon/ul1137591-9.jpg"></div>
-
-                <div class="ckd-author-desc">This is desc for author</div>
-                <div class="ckd-author-meta">This is meta for author</div>
-
+                <img class="ckd-icon" src="#" data-source="ckdItemAIcon">
+                <span class="ckd-title">This is custom <code>title</code></span>
+                <a class="ckd-title-link" href="index.html" data-source="ckdItemATitle"></a>
+                <span class="ckd-info" data-source="ckdItemAInfo"></span>
+                <span class="ckd-desc" data-source="ckdItemADesc"></span>
+                <span class="ckd-content ckdItemAContent">This is custom <code>content</code>.</span>
+                <span class="ckd-meta" data-source="ckdItemAMeta"></span>
+                <img class="ckd-avatar" src="#" data-source="ckdItemAAvatar">
+                <a class="ckd-author" href="index.html" data-source="ckdItemAAuthor"></a>
+                <a class="ckd-author-link" href="index.html" data-source="ckdItemAAuthorLink"></a>
+                <span class="ckd-author-desc" data-source="ckdItemAAuthorDesc"></span>
+                <span class="ckd-author-meta" data-source="ckdItemAAuthorMeta"></span>
             </div>
-
-            <div class="ckd-ft">This is footer</div>
-        </div>
-
-        <!-- demo -->
-        <div class="ck-mini-unit">
-            <h2 class="ckd-hd">This is header</h2>
-
             <div class="ckd-item">
-
-                <div class="ckd-title-prefix">Before title</div>
-                <a class="ckd-title" href="#title">This is title</a>
-                <div class="ckd-title-suffix">After title</div>
-
-                <div class="ckd-titletag">tag1</div>
-                <div class="ckd-titletag">tag2</div>
-
-                <div><img class="ckd-icon" src="http://img3.douban.com/view/photo/photo/public/p1702376626.jpg"></div>
-
-                <div class="ckd-subtitle">This is subtitle or desc</div>
-                <div class="ckd-info">some info</div>
-
-                <div class="ckd-content">This is content</div>
-                <div class="ckd-meta">This is meta</div>
-
-                <div class="ckd-author-prefix">Before author</div>
-                <a class="ckd-author" href="#author">This is author</a>
-                <div class="ckd-author-suffix">After author</div>
-
-                <div><img class="ckd-avatar" src="http://img3.douban.com/icon/ul1137591-9.jpg"></div>
-
-                <div class="ckd-author-desc">This is desc for author</div>
-                <div class="ckd-author-meta">This is meta for author</div>
-
+                <img class="ckd-icon" src="#" data-source="ckdItemBIcon">
+                <span class="ckd-title" data-source="ckdItemBTitle"></span>
+                <a class="ckd-title-link-extern" href="#" data-source="ckdItemBTitleLink"></a>
+                <span class="ckd-info" data-source="ckdItemBInfo"></span>
+                <span class="ckd-desc" data-source="ckdItemBDesc"></span>
+                <span class="ckd-content ckdItemBContent">This is custom <code>content</code>.</span>
+                <span class="ckd-meta" data-source="ckdItemBMeta"></span>
+                <img class="ckd-avatar" src="#" data-source="ckdItemBAvatar">
+                <a class="ckd-author" href="index.html" data-source="ckdItemBAuthor"></a>
+                <a class="ckd-author-link" href="index.html" data-source="ckdItemBAuthorLink"></a>
+                <span class="ckd-author-desc" data-source="ckdItemBAuthorDesc"></span>
+                <span class="ckd-author-meta" data-source="ckdItemBAuthorMeta"></span>
             </div>
-
-            <div class="ckd-ft">This is footer</div>
         </div>
-        <!-- demo end -->
+        <!--demo end-->
 
-        <div class="ck-list-unit" data-style="post" data-cfg-plainhd="true">
-            <h2 class="ckd-hd">This is header</h2>
-
-            <div class="ckd-item">
-
-                <div class="ckd-title-prefix">Before title</div>
-                <a class="ckd-title" href="#title">This is title</a>
-                <div class="ckd-title-suffix">After title</div>
-
-                <div class="ckd-titletag">tag1</div>
-                <div class="ckd-titletag">tag2</div>
-
-                <div><img class="ckd-icon" src="http://img3.douban.com/view/photo/photo/public/p1702376626.jpg"></div>
-
-                <div class="ckd-subtitle">This is subtitle or desc</div>
-                <div class="ckd-info">some info</div>
-
-                <div class="ckd-content">This is content</div>
-                <div class="ckd-meta">This is meta</div>
-
-                <div class="ckd-author-prefix">Before author</div>
-                <a class="ckd-author" href="#author">This is author</a>
-                <div class="ckd-author-suffix">After author</div>
-
-                <div><img class="ckd-avatar" src="http://img3.douban.com/icon/ul1137591-9.jpg"></div>
-
-                <div class="ckd-author-desc">This is desc for author</div>
-                <div class="ckd-author-meta">This is meta for author</div>
-
-                <!--<div class="ckd-subitem">-->
-
-                    <!--<div class="ckd-title-prefix">Before title</div>-->
-                    <!--<a class="ckd-title" href="#title">This is title</a>-->
-                    <!--<div class="ckd-title-suffix">After title</div>-->
-
-                    <!--<div class="ckd-titletag">tag1</div>-->
-                    <!--<div class="ckd-titletag">tag2</div>-->
-
-                    <!--<div><img class="ckd-icon" src="http://img3.douban.com/view/photo/photo/public/p1702376626.jpg"></div>-->
-
-                    <!--<div class="ckd-subtitle">This is subtitle or desc</div>-->
-                    <!--<div class="ckd-info">some info</div>-->
-
-                    <!--<div class="ckd-content">This is content</div>-->
-                    <!--<div class="ckd-meta">This is meta</div>-->
-
-                    <!--<div class="ckd-author-prefix">Before author</div>-->
-                    <!--<a class="ckd-author" href="#author">This is author</a>-->
-                    <!--<div class="ckd-author-suffix">After author</div>-->
-
-                    <!--<div><img class="ckd-avatar" src="http://img3.douban.com/icon/ul1137591-9.jpg"></div>-->
-
-                    <!--<div class="ckd-author-desc">This is desc for author</div>-->
-                    <!--<div class="ckd-author-meta">This is meta for author</div>-->
-
-                <!--</div>-->
-
-                <!--<div class="ckd-subitem">-->
-
-                    <!--<div class="ckd-title-prefix">Before title</div>-->
-                    <!--<a class="ckd-title" href="#title">This is title</a>-->
-                    <!--<div class="ckd-title-suffix">After title</div>-->
-
-                    <!--<div class="ckd-titletag">tag1</div>-->
-                    <!--<div class="ckd-titletag">tag2</div>-->
-
-                    <!--<div><img class="ckd-icon" src="http://img3.douban.com/view/photo/photo/public/p1702376626.jpg"></div>-->
-
-                    <!--<div class="ckd-subtitle">This is subtitle or desc</div>-->
-                    <!--<div class="ckd-info">some info</div>-->
-
-                    <!--<div class="ckd-content">This is content</div>-->
-                    <!--<div class="ckd-meta">This is meta</div>-->
-
-                    <!--<div class="ckd-author-prefix">Before author</div>-->
-                    <!--<a class="ckd-author" href="#author">This is author</a>-->
-                    <!--<div class="ckd-author-suffix">After author</div>-->
-
-                    <!--<div><img class="ckd-avatar" src="http://img3.douban.com/icon/ul1137591-9.jpg"></div>-->
-
-                    <!--<div class="ckd-author-desc">This is desc for author</div>-->
-                    <!--<div class="ckd-author-meta">This is meta for author</div>-->
-
-                <!--</div>-->
-
-            </div>
-
-            <div class="ckd-ft">This is footer</div>
+        <!--demo-->
+        <div class="ck-mini-unit" 
+                data-style="slide" 
+                data-source="ckdListA">
+            <a class="ckd-hd" href="#hdLink">Mini ("slide" style, contain pictures)</a>
         </div>
+        <!--demo end-->
 
-        <!-- demo -->
-        <div class="ck-mini-unit" data-cfg-plainhd="true">
-            <h2 class="ckd-hd">This is header</h2>
-
-            <div class="ckd-item">
-
-                <div class="ckd-title-prefix">Before title</div>
-                <a class="ckd-title" href="#title">This is title</a>
-                <div class="ckd-title-suffix">After title</div>
-
-                <div class="ckd-titletag">tag1</div>
-                <div class="ckd-titletag">tag2</div>
-
-                <div><img class="ckd-icon" src="http://img3.douban.com/view/photo/photo/public/p1702376626.jpg"></div>
-
-                <div class="ckd-subtitle">This is subtitle or desc</div>
-                <div class="ckd-info">some info</div>
-
-                <div class="ckd-content">This is content</div>
-                <div class="ckd-meta">This is meta</div>
-
-                <div class="ckd-author-prefix">Before author</div>
-                <a class="ckd-author" href="#author">This is author</a>
-                <div class="ckd-author-suffix">After author</div>
-
-                <div><img class="ckd-avatar" src="http://img3.douban.com/icon/ul1137591-9.jpg"></div>
-
-                <div class="ckd-author-desc">This is desc for author</div>
-                <div class="ckd-author-meta">This is meta for author</div>
-
-            </div>
-
-            <div class="ckd-ft">This is footer</div>
+        <!--demo-->
+        <div class="ck-mini-unit" 
+                data-style="slide">
+            <a class="ckd-hd" href="#hdLink">Blank Mini ("slide" style)</a>
         </div>
-        <!-- demo end -->
+        <!--demo end-->
+
+        <!--demo-->
+        <div class="ck-mini-unit" 
+                data-style="slide">
+            <a class="ckd-hd" href="#hdLink">Mini ("slide" style)</a>
+            <div class="ckd-item" data-source="ckdItemC"></div>
+        </div>
+        <!--demo end-->
 
     </div>
 
-    <div class="ck-card">
+    <div class="ck-card" id="hdLink" data-cfg-blank="Link of header">
+    </div>
+
+    <div class="ck-card" id="titleLink" data-cfg-blank="Link of title">
+    </div>
+
+    <div class="ck-card" id="authorLink" data-cfg-blank="Link of author">
+    </div>
+
+    <div class="ck-card" id="consoleCard">
+
+        <div class="ck-box-unit" data-cfg-paper="true">
+            <header class="ckd-hd">Console</header>
+            <div id="console"></div>
+        </div>
+
+        <script type="text/cardscript" data-hook="ready">
+        require(['mo/console', 'cardkit/app'], function(console, ck){
+            console.config({
+                record: false,
+                output: ck.viewport.find('#console')[0]
+            });
+        });
+        </script>
+
+    </div>
+
+    <div class="ck-card" id="rawCard">
+
+        <div class="ck-box-unit" data-cfg-plainhd="true">
+            <header class="ckd-hd">Raw source</header>
+            <div class="ck-folder enabled"
+                    data-disable-label="Hide the code" 
+                    data-label="header">
+                <header>Hide the code</header>
+                <div class="democode content" gsource="rawData1"></div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="ck-card" id="optionsCard">
     </div>
 
     <div class="ck-card ck-loading" id="ckLoading">
@@ -258,11 +153,119 @@
 
 </div>
 
+<div class="ck-raw" id="rawData1">
+
+    <div class="ckd-source ckdListA">
+        <div class="ckd-item ckdItemA">
+            <img class="ckd-icon ckdItemAIcon" src="http://img3.douban.com/lpic/s1959726.jpg">
+            <a class="ckd-title ckdItemATitle" href="#titleLink">This is <code>title</code></a>
+            <span class="ckd-title-tag"><code>tag</code>2</span>
+            <span class="ckd-info ckdItemAInfo"><code>info</code></span>
+            <span class="ckd-desc ckdItemADesc">This is <code>desc</code> or <code>subtitle</code></span>
+            <span class="ckd-content ckdItemAContent">This is <code>content</code> A.</span>
+            <img src="http://ww4.sinaimg.cn/bmiddle/681f611fjw1e4dw2bf1mqj20gh097gn5.jpg" class="ckd-content ckdItemAContent"> 
+            <span class="ckd-content ckdItemAContent">This is content B.</span> 
+            <span class="ckd-content ckdItemAContent">This is content C.</span> 
+            <span class="ckd-content ckdItemAContent">This is content D.</span> 
+            <span class="ckd-content ckdItemAContent">This is content E.</span>
+            <span class="ckd-content ckdItemAContent">This is content F.</span> 
+            <span class="ckd-content ckdItemAContent">This is content G.</span>
+            <span class="ckd-meta ckdItemAMeta">This is <code>meta</code> A</span>
+            <span class="ckd-meta ckdItemAMeta">This is <code>meta</code> B</span>
+            <img class="ckd-avatar ckdItemAAvatar" src="http://img3.douban.com/icon/ul1137591-9.jpg">
+            <a class="ckd-author ckdItemAAuthor" href="#">This is <code>author</code></a>
+            <a class="ckd-author-link ckdItemAAuthorLink" href="#authorLink"></a>
+            <span class="ckd-author-prefix"><code>author-prefix</code></span>
+            <span class="ckd-author-suffix"><code>author-Suffix</code></span>
+            <span class="ckd-author-desc ckdItemAAuthorDesc">This is <code>author-desc</code> A</span>
+            <span class="ckd-author-desc ckdItemAAuthorDesc">This is <code>author-desc</code> B</span>
+            <span class="ckd-author-meta ckdItemAAuthorMeta">This is <code>author-meta</code></span>
+        </div>
+        <div class="ckd-item ckdItemB">
+            <img class="ckd-icon ckdItemBIcon" src="http://img5.douban.com/lpic/s25812589.jpg">
+            <span class="ckd-title ckdItemBTitle">This is <code>title</code> (open index.html in a new window)</span>
+            <a class="ckd-title-link-extern ckdItemBTitleLink" href="index.html"></a>
+            <!-- or:
+            <a class="ckd-title-link ckdItemBTitleLink" href="index.html"></a>
+            -->
+            <span class="ckd-info ckdItemBInfo"><code>info</code></span>
+            <span class="ckd-content ckdItemBContent">This is <code>content</code> A.</span>
+            <span class="ckd-content ckdItemBContent">This is content B.</span> 
+            <span class="ckd-content ckdItemBContent">This is content C.</span> 
+            <span class="ckd-content ckdItemBContent">This is content D.</span> 
+            <span class="ckd-content ckdItemBContent">This is content E.</span>
+            <span class="ckd-content ckdItemBContent">This is content F.</span> 
+            <span class="ckd-content ckdItemBContent">This is content G.</span>
+            <img src="http://ww3.sinaimg.cn/thumbnail/685e4a0fgw1e4e3z578apj20k60m8wfz.jpg" class="ckd-content ckdItemBContent">
+            <span class="ckd-content ckdItemBContent">This is content H.</span> 
+            <span class="ckd-content ckdItemBContent">This is content I.</span>
+            <span class="ckd-content ckdItemBContent">This is content J.</span> 
+            <span class="ckd-content ckdItemBContent">This is content K.</span>
+            <span class="ckd-meta ckdItemBMeta">This is <code>meta</code></span>
+            <img class="ckd-avatar ckdItemBAvatar" src="http://img3.douban.com/icon/ul24955975-13.jpg">
+            <a class="ckd-author ckdItemBAuthor" href="#authorLink">This is <code>author</code></a>
+            <span class="ckd-author-prefix"><code>author-prefix</code></span>
+            <span class="ckd-author-suffix"><code>author-Suffix</code></span>
+            <span class="ckd-author-desc ckdItemBAuthorDesc">This is <code>author-desc</code></span>
+            <span class="ckd-author-meta ckdItemBAuthorMeta">This is <code>author-meta</code></span>
+        </div>
+        <div class="ckd-item ckdItemC">
+            <span class="ckd-title">This is <code>title</code></span>
+            <span class="ckd-title-prefix"><code>prefix</code></span>
+            <span class="ckd-title-suffix"><code>Suffix</code></span>
+            <span class="ckd-title-tag"><code>tag</code>1</span>
+            <span class="ckd-title-tag"><code>tag</code>2</span>
+            <span class="ckd-info"><code>info</code></span>
+            <span class="ckd-desc">This is <code>desc</code> or <code>subtitle</code></span>
+            <span class="ckd-content">This is <code>content</code> A.</span>
+            <span class="ckd-content">This is content B.</span> 
+            <span class="ckd-content">This is content C.</span> 
+            <span class="ckd-content">This is content D.</span> 
+            <span class="ckd-meta">This is <code>meta</code> A</span>
+            <span class="ckd-meta">This is <code>meta</code> B</span>
+            <a class="ckd-author" href="#authorLink">This is <code>author</code></a>
+            <span class="ckd-author-suffix"><code>author-Suffix</code></span>
+            <span class="ckd-author-info"><code>author-info</code></span>
+            <span class="ckd-author-meta">This is <code>author-meta</code></span>
+        </div>
+        <div class="ckd-item ckdItemD">
+            <img class="ckd-icon ckdItemAIcon" src="http://img3.douban.com/icon/ul1137591-9.jpg">
+            <a class="ckd-title ckd-title-link-alone ckd-title-link-extern" href="index.html">This is <code>title</code></a>
+            <span class="ckd-info"><code>info</code></span>
+            <span class="ckd-desc">This is <code>desc</code> or <code>subtitle</code></span>
+            <span class="ckd-content">This is <code>content</code> A.</span>
+            <span class="ckd-content">This is content B.</span> 
+            <span class="ckd-content">This is content C.</span> 
+            <span class="ckd-content">This is content D.</span> 
+            <span class="ckd-meta">This is <code>meta</code> A</span>
+            <span class="ckd-meta">This is <code>meta</code> B</span>
+            <a class="ckd-author ckd-author-link-extern" href="index.html">This is <code>author</code></a>
+            <span class="ckd-author-info"><code>author-info</code></span>
+            <span class="ckd-author-desc">This is <code>author-desc</code></span>
+            <span class="ckd-author-meta">This is <code>author-meta</code></span>
+        </div>
+    </div>
+
+    <button type="button" class="ck-select ckdSelectA"
+            data-fluid="true"
+            data-title="Choose the page">
+        <span>Filter</span>
+        <a href="picker.html" class="ck-option" target="_self">picker.html</a>
+        <a href="control.html" class="ck-option" target="_self">control.html</a>
+        <a href="index.html" class="ck-option" target="_self">index.html</a>
+    </button>
+
 </div>
 
+</div>
+
+<script src="js/shCore.js"></script>
+<script src="js/shBrushXml.js"></script>
+<script src="js/shBrushJScript.js"></script>
 <script src="dist/js/main.js"></script>
 <!-- COLLECTED JS -->
-<script>
+<script id="jsdemo1">
 </script>
+<script src="js/common.js"></script>
 </body>
 </html>

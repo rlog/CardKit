@@ -48,6 +48,7 @@ define('momo/scroll', [
             self._scrollDown = null;
             self._lastY = t.clientY;
             self._scrollY = null;
+            self._ended = false;
             if (self.scrollingNode) {
                 var scrolling = self._scrolling;
                 self._scrolling = false;
@@ -55,10 +56,13 @@ define('momo/scroll', [
                 self.once(self.MOVE, function(){
                     self.once('scroll', function(){
                         if (tm === self._tm) {
-                            self._scrollY = self.scrollingNode.scrollTop;
                             if (!scrolling) {
                                 self._started = true;
                                 self.trigger({ target: self.node }, self.event.scrollstart);
+                                if (self._ended) {
+                                    self._ended = false;
+                                    self.trigger({ target: self.node }, self.event.scrollend);
+                                }
                             }
                         }
                     }, self.scrollingNode);
@@ -84,11 +88,15 @@ define('momo/scroll', [
             // end
             if (self._scrollY !== null) {
                 var vp = self.scrollingNode,
-                    gap = Math.abs(vp.scrollTop - self._scrollY);
+                    gap = Math.abs(vp.scrollTop - self._scrollY) || 0;
                 if (self._scrollY >= 0 && (self._scrollY <= vp.scrollHeight + vp.offsetHeight)
-                        && (gap && gap < self._config.scrollEndGap)) {
-                    self._started = false;
-                    self.trigger(node, self.event.scrollend);
+                        && gap < self._config.scrollEndGap) {
+                    if (self._started) {
+                        self.trigger(node, self.event.scrollend);
+                        self._started = false;
+                    } else {
+                        self._ended = true;
+                    }
                 } else {
                     var tm = self._tm;
                     self._scrolling = true;

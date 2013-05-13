@@ -5,6 +5,10 @@ define([
     './util'
 ], function($, _, util){
     
+    var getCustom = util.getCustom,
+        getHd = util.getHd,
+        getItemDataOuter = util.getItemDataOuter;
+
     function exports(unit, raw){
         unit = $(unit);
         var source = util.getSource(unit, raw),
@@ -12,64 +16,47 @@ define([
                 blank: unit.data('cfgBlank'),
                 plainhd: unit.data('cfgPlainhd')
             },
-            hd = get_hd(source && source.find('.ckd-hd')),
-            hd_opt = get_all_outer(source && source.find('.ckd-hdopt')),
-            ft = get_hd(source && source.find('.ckd-ft')),
-            items = source && source.find('.ckd-item').map(get_item),
-            custom_hd = (util.getCustom('.ckd-hd', unit, raw, get_hd) || [{}])[0],
-            custom_hd_opt = (util.getCustom('.ckd-hdopt', unit, raw, get_all_outer) || []).join(''),
-            custom_ft = (util.getCustom('.ckd-ft', unit, raw, get_hd) || [{}])[0],
-            custom_items = util.getCustom('.ckd-item', unit, raw, get_item) || $();
+            hd = getHd(source && source.find('.ckd-hd')),
+            hd_link_extern = getHd(source && source.find('.ckd-hd-link-extern')),
+            hd_link = hd_link_extern.href 
+                ? hd_link_extern
+                : getHd(source && source.find('.ckd-hd-link')),
+            hd_opt = getItemDataOuter(source && source.find('.ckd-hdopt'), 'hdopt'),
+            ft = getHd(source && source.find('.ckd-ft')),
+            items = source && source.find('.ckd-item').map(function(elm){
+                return getFormItemData(elm, null, null, raw);
+            }) || $(),
+            custom_hd = getCustom('.ckd-hd', unit, raw, getHd)[0] || {},
+            custom_hd_link_extern = getCustom('.ckd-hd-link-extern', unit, raw, getHd)[0] || {},
+            custom_hd_link = custom_hd_link_extern.href 
+                ? custom_hd_link_extern
+                : (getCustom('.ckd-hd-link', unit, raw, getHd)[0] || {}),
+            custom_hd_opt = getCustom('.ckd-hdopt', unit, raw, getItemDataOuter, 'hdopt').join(''),
+            custom_ft = getCustom('.ckd-ft', unit, raw, getHd)[0] || {},
+            custom_items = getCustom('.ckd-item', unit, raw, getFormItemData);
         var data = {
             config: config,
             style: unit.data('style'),
             items: custom_items.concat(items || $()),
             hd: custom_hd.html === undefined ? hd.html : custom_hd.html,
-            hd_url: custom_hd.href || custom_hd.href !== null && hd.href,
+            hd_url: custom_hd_link.href 
+                || custom_hd_link.href !== null && hd_link.href 
+                || custom_hd.href 
+                || custom_hd.href !== null && hd.href,
+            hd_url_extern: custom_hd_link_extern.href || hd_link_extern.href,
             hd_opt: custom_hd_opt + hd_opt,
             ft: custom_ft.html === undefined ? ft.html : custom_ft.html
         };
         return data;
     }
 
-    function get_item(item, custom){
+    function getFormItemData(item, custom, ckdname, raw){
         item = $(item);
         var data = {
-            content: util.getInnerHTML(item)
+            content: getCustom('.ckd-content', item, raw, getItemDataOuter, 'content').join('') 
+                || util.getInnerHTML(item),
         };
-        if (custom && typeof custom === 'object') {
-            custom = get_item(custom);
-            for (var i in custom) {
-                if (custom[i]) {
-                    data[i] = custom[i];
-                }
-            }
-        }
-        return data;
-    }
-
-    function get_hd(source, custom){
-        source = $(source);
-        var data = source && {
-            html: util.getInnerHTML(source),
-            href: util.getHref(source)
-        } || {};
-        if (custom && typeof custom === 'object') {
-            custom = get_hd(custom);
-            for (var i in custom) {
-                if (custom[i]) {
-                    data[i] = custom[i];
-                }
-            }
-        }
-        return data;
-    }
-
-    function get_all_outer(source){
-        source = $(source);
-        var data = util.getOuterHTML(source) || '';
-        source.remove();
-        return data;
+        return util.mergeSource(data, custom, getFormItemData, raw);
     }
 
     return exports;
