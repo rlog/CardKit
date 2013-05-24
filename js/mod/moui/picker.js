@@ -53,7 +53,7 @@ define('moui/picker', [
             if (opt.field !== undefined) {
                 if (opt.field) {
                     this._field = $(opt.field, 
-                        typeof opt.field === 'string' && this._node);
+                        typeof opt.field === 'string' && this._node).eq(0);
                 } else {
                     this._field = [];
                 }
@@ -119,6 +119,19 @@ define('moui/picker', [
                 })[0];
             }
             return elm;
+        },
+
+        getOptions: function() {
+            return this._options;
+        },
+
+        getSelected: function() {
+            if (this._config.multiselect) {
+                return this._allSelected || [];
+            } else {
+                return this._lastSelected
+                    ? [this._lastSelected] : [];
+            }
         },
 
         val: function(){

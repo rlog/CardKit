@@ -2,6 +2,7 @@
 .ck-card {
   display:none;
   width:100%;
+  height:100%;
   background:$view_color;
   @include box-shadow(1px 0px 2px rgba(0,0,0,.1));
   @include user-select(none);
@@ -14,22 +15,6 @@
 
   .ck-footer {
     display:block;
-  }
-
-  .ck-top-tips {
-    text-align:center;
-    font-size:$title_size;
-    color:#999;
-    height:$nav_height + 2px;
-    line-height:$nav_height + 2px;
-    width:100%;
-    opacity:0;
-    @include transition(opacity 0.1s ease 0.3s);
-
-    body.ck-topbar-enabled & {
-      opacity:1;
-    }
-
   }
 
   .ckd-top-create {
@@ -75,6 +60,12 @@
     position:fixed;
     bottom:50px;
     left:0;
+    padding:5px 0;
+    //@include display-box;
+    //@include box-orient(vertical);
+    //@include box-pack(center);
+    //@include box-align(center);
+    //@include box-direction(reverse);
   }
 
   span {
@@ -98,8 +89,16 @@
 
   }
   
-  .ck-footer, .ck-top-tips {
+  .ck-footer {
     display:none;
+  }
+
+  body.no-cardscroll & {
+    
+    div {
+      position:absolute;
+    }
+
   }
 
 }

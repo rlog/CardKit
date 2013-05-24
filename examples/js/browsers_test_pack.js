@@ -4020,9 +4020,17 @@ define("dollar/origin", [
 
         // Event
 
-        bind: event_access('add'),
+        on: event_access('add'),
 
-        unbind: event_access('remove'),
+        off: event_access('remove'),
+
+        once: function(subject, cb){
+            var fn = function(){
+                $(this).unbind(subject, fn);
+                return cb.apply(this, arguments);
+            };
+            $(this).bind(subject, fn);
+        },
 
         trigger: trigger,
 
@@ -4043,6 +4051,9 @@ define("dollar/origin", [
         }
 
     });
+
+    ext.bind = ext.on;
+    ext.unbind = ext.off;
 
     // private
 
@@ -4520,7 +4531,7 @@ define('momo/base', [
             this.bind(ev, fn, node);
             function fn(){
                 self.unbind(ev, fn, node);
-                handler.apply(this, arguments);
+                return handler.apply(this, arguments);
             }
         },
 
@@ -5112,6 +5123,53 @@ require([
             //console.warn('push History', History, History.getState().data);
         //}
     }
+
+    $('.btn6').bind('click', add_hash);
+
+    $('.btn7').bind('click', replace_hash);
+
+    $(window).bind("hashchange", function(){
+        console.warn('hashchange', location.hash);
+    });
+
+    //add_hash();
+    setTimeout(function(){
+        //location.href = location.href.replace(/#.*/, '') + '?a=1'
+        //add_hash();
+    }, 1000);
+
+    //$(window).bind('touchstart', function(){
+        //add_hash();
+        //$(window).unbind('touchstart', arguments.callee)
+    //});
+
+    function add_hash(){
+        alert(history.length)
+        location.href = location.href.replace(/#(.*)|$/, '#$1' + '!/' + 'cardid');
+        alert(history.length)
+    }
+
+    function replace_hash(){
+        alert(history.length + ', ' + location.href)
+        location.replace(location.href.replace(/#(.*)|$/, '#$1' + '*/' + 'cardid'))
+        alert(history.length + ', ' + location.href)
+    }
+
+    $('.btn8').bind('click', function(){
+        alert(history.length)
+        history.back();
+    });
+
+    $('.btn9').bind('click', function(){
+        alert(history.length)
+        history.back();
+        $(window).bind("hashchange", function(){
+            setTimeout(function(){
+                alert(history.length)
+                history.back();
+            }, 500)
+        });
+    });
 
 });
 

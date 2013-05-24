@@ -17,6 +17,7 @@ define([
     './view/modalcard',
     './view/actionview',
     './view/growl',
+    './tpl/layout/ctlbar',
     './bus',
     './render',
     './supports',
@@ -24,19 +25,23 @@ define([
     'mo/domready'
 ], function($, _, browsers, tpl, easing, soviet, choreo, 
     momoBase, momoTap, momoSwipe, momoDrag, momoScroll, 
-    control, picker, stars, modalCard, actionView, growl,
-    bus, render, supports, env){
+    control, picker, stars, modalCard, actionView, growl, 
+    tpl_ctlbar, bus, render, supports, env){
 
     var window = this,
         history = window.history,
         location = window.location,
         document = window.document,
         body = document.body,
-        //back_timeout,
         last_view_for_modal,
         last_view_for_actions,
         gc_id = 0,
 
+        HASH_SEP = '!/',
+        CLEARED_HASH = '#' + HASH_SEP + 'i',
+        DEFAULT_CARDID = 'ckDefault',
+        LOADING_CARDID = 'ckLoading',
+        MODAL_CARDID = '_modal_',
         MINI_ITEM_MARGIN = 10,
         MINI_LIST_PADDING = 15,
 
@@ -67,22 +72,11 @@ define([
             //clear_active_item_mask(ck.viewport);
         //},
         
-        '.ck-card .ck-post-link': handle_control,
+        '.ck-post-link': handle_control,
 
-        '.ck-card .ck-post-button': handle_control,
-        '.ck-card .ck-post-button span': function tap_ck_post(){
-            if (!$(this).hasClass('ck-post-button')) {
-                return tap_ck_post.call(this.parentNode);
-            }
-            handle_control.call(this);
-        },
+        '.ck-post-button, .ck-post-button span': tap_ck_post,
 
-        '.ck-card .ck-switch, .ck-card .ck-switch span': function tap_ck_switch(){
-            if (!$(this).hasClass('ck-switch')) {
-                return tap_ck_switch.call(this.parentNode);
-            }
-            toggle_control.call(this);
-        },
+        '.ck-switch, .ck-switch span': tap_ck_switch,
 
         '.ck-segment .ck-option, .ck-segment .ck-option span': function(){
             var btn = $(this);
@@ -157,16 +151,22 @@ define([
             modalCard.cancel();
         },
 
-        '.ck-top-title': function(){
-            if (this.href) {
-                ck.openURL(this.href);
+        '.ck-ctl-backward': function(){
+            if (ck.viewport[0].id === DEFAULT_CARDID) {
+                back_handler(LOADING_CARDID);
+            } else {
+                back_handler(ck.viewport.data('prevCard') || DEFAULT_CARDID);
             }
+        },
+
+        '.ck-ctl-reload': function(){
+            window.location.reload();
         },
 
         '.ck-top-create .btn': open_modal_card,
 
         '.ck-top-action .btn': function(){
-        
+            actionView(this).open();
         }
     
     };
@@ -189,6 +189,20 @@ define([
         var controller = control(this).toggle();
         mark_gc(controller);
     } 
+
+    function tap_ck_post(){
+        if (!$(this).hasClass('ck-post-button')) {
+            return tap_ck_post.call(this.parentNode);
+        }
+        handle_control.call(this);
+    }
+
+    function tap_ck_switch(){
+        if (!$(this).hasClass('ck-switch')) {
+            return tap_ck_switch.call(this.parentNode);
+        }
+        toggle_control.call(this);
+    }
 
     function show_actions(me){
         var opt = _.mix({
@@ -250,7 +264,7 @@ define([
     modalCard.event.bind('prepareOpen', function(){
         ck.disableView = true;
         if (!supports.CARD_SCROLL) {
-            window.scrollTo(0, -1);
+            ck.resetWindowTop();
         } else {
             $(body).addClass('bg').addClass('modal-view');
         }
@@ -300,8 +314,8 @@ define([
     }).bind('close', function(){
         ck.changeView(last_view_for_modal);
         $(body).removeClass('bg');
-    }).bind('needclose', function(){
-        ck.closeModal();
+    //}).bind('needclose', function(){
+        //ck.closeModal();
     });
 
     bus.bind('actionView:prepareOpen', function(actionCard){
@@ -311,6 +325,7 @@ define([
         current[0].scrollTop = 0;
         ck.changeView(current, {
             preventRender: true,
+            preventScroll: true,
             isActions: true
         });
         if (!supports.CARD_SCROLL) {
@@ -325,6 +340,7 @@ define([
         }
         ck.changeView(last_view_for_actions, {
             preventRender: modalCard.isOpened,
+            preventScroll: true,
             isModal: modalCard.isOpened
         });
     }).bind('actionView:close', function(){
@@ -336,6 +352,7 @@ define([
         }
         ck.changeView(last_view_for_actions, {
             preventRender: modalCard.isOpened,
+            preventScroll: true,
             isModal: modalCard.isOpened
         });
     }).bind('actionView:jump', function(actionCard, href, target){
@@ -347,14 +364,18 @@ define([
     var ck = {
 
         init: function(opt){
-            var root = this.root = opt.root;
             var doc = $(document);
+            var root = this.root = opt.root;
             this.wrapper = $('.ck-wrapper', root);
             this.header = $('.ck-header', root);
+            if (!supports.BROWSER_CONTROL) {
+                this.ctlbar = $(tpl_ctlbar.template).appendTo(this.wrapper);
+                $(body).addClass('has_ctlbar');
+            }
             this.footer = $('.ck-footer', root);
             this.raw = $('.ck-raw', root);
-            this.loadingCard = $('#ckLoading').data('rendered', '1');
-            this.defaultCard = $('#ckDefault');
+            this.loadingCard = $('#' + LOADING_CARDID).data('rendered', '1');
+            this.defaultCard = $('#' + DEFAULT_CARDID);
             this.scrollMask = $(TPL_MASK).appendTo(body);
             if (env.showScrollMask) {
                 this.scrollMask.css({
@@ -373,7 +394,7 @@ define([
             this.headerHeight = this.header.height();
             this.sizeInited = false;
             this.viewportGarbage = {};
-            this.sessionLocked = true;
+            this._sessionLocked = true;
 
             this.initWindow();
 
@@ -387,7 +408,11 @@ define([
             });
 
             this.scrollGesture = momoScroll(document);
-            momoTap(document);
+            momoTap(document, {
+                tapThreshold: browsers.os !== 'android' 
+                    || !browsers.chrome && 20 
+                    || 0
+            });
             momoSwipe(this.wrapper, {
                 'timeThreshold': 10000,
                 'distanceThreshold': 10 
@@ -402,14 +427,11 @@ define([
             if (supports.HIDE_TOPBAR) {
                 $(body).addClass('mobilesafari-bar');
             }
-            this.initState();
+            if (supports.FIXED_BOTTOM_BUGGY) {
+                $(body).addClass('fixed-bottom-buggy');
+            }
 
-            setTimeout(function(){
-                ck.hideAddressbar();
-                ck.hideLoadingCard();
-                ck.enableControl();
-                ck.sessionLocked = false;
-            }, 0);
+            this.initState();
 
             $(window).bind('resize', function(){
                 var current = ck.isLandscape();
@@ -417,7 +439,7 @@ define([
                     ck.initWindow();
                     ck.hideAddressbar(); // @TODO 无效
                     if (actionView.current 
-                            && !supports.UNIVERSAL_TRANS) {
+                            && !supports.CARD_SCROLL) {
                         ck.viewport[0].innerHTML = ck.viewport[0].innerHTML;
                     }
                 }
@@ -509,7 +531,7 @@ define([
 
             }
 
-            if (supports.UNIVERSAL_TRANS) {
+            if (supports.CARD_SCROLL) {
 
                 doc.bind('scroll', function(){
                     if (modalCard.isOpened) {
@@ -518,7 +540,7 @@ define([
                             return;
                         }
                         //ck.hideAddressbar();
-                        window.scrollTo(0, -1);
+                        ck.resetWindowTop();
                         body.scrollTop = 0;
                         if (y > 40) {
                             ck.viewport[0].scrollTop = ck.viewport[0].scrollTop + y - 40;
@@ -528,43 +550,52 @@ define([
 
             }
 
-            if (supports.HIDE_TOPBAR
-                    && supports.CARD_SCROLL) {
+            if (supports.CARD_SCROLL) {
 
                 var startY,
-                    hold_timer,
                     topbar_holded,
-                    topbar_tips = growl({
-                        expires: -1,
-                        keepalive: true,
-                        content: '向下拖动显示地址栏'
-                    }),
                     cancel_hold = function(){
-                        clearTimeout(hold_timer);
-                        if (topbar_holded) {
-                            topbar_holded = false;
-                            topbar_tips.close();
+                        topbar_holded = false;
+                    },
+                    scroll_on_header = function(e){
+                        if (this !== e.target) {
+                            return;
                         }
+                        startY = e.touches[0].clientY;
+                        setTimeout(function(){
+                            topbar_holded = true;
+                            ck.viewport[0].scrollTop = 0;
+                        }, 0);
                     };
-                this.header.bind('touchstart', function(e){
-                    startY = e.touches[0].clientY;
-                    hold_timer = setTimeout(function(){
-                        topbar_holded = true;
-                        ck.viewport[0].scrollTop = 0;
-                        topbar_tips.open();
-                    }, 510);
-                }).bind('touchmove', function(e){
-                    clearTimeout(hold_timer);
-                    if (topbar_holded && e.touches[0].clientY < startY) {
-                        cancel_hold();
-                        topbar_holded = true;
-                        ck.windowFullHeight = Infinity;
-                        ck.hideAddressbar();
-                    }
-                }).bind('touchend', cancel_hold).bind('touchcancel', cancel_hold);
+
+                this.header.find('.ck-top-title')
+                    .bind('touchstart', scroll_on_header);
+                this.header.bind('touchstart', scroll_on_header);
+
+                if (supports.HIDE_TOPBAR) {
+
+                    this.header.bind('touchmove', function(e){
+                        if (topbar_holded && e.touches[0].clientY < startY) {
+                            cancel_hold();
+                            topbar_holded = true;
+                            ck.windowFullHeight = Infinity;
+                            ck.hideAddressbar();
+                        }
+                    }).bind('touchend', cancel_hold)
+                        .bind('touchcancel', cancel_hold);
+
+                }
 
             }
 
+        },
+
+        showView: function(){
+            $(body).addClass('ck-inited');
+            ck.hideAddressbar();
+            ck.hideLoadingCard();
+            ck.enableControl();
+            bus.resolve('inited');
         },
 
         initWindow: function(){
@@ -572,130 +603,194 @@ define([
             this.windowFullHeight = Infinity;
         },
 
-        initState: function(){
+        initStateWatcher: function(){
 
-            var travel_history, restore_state, restore_modal;
+            var is_hash_change,
+                rewrite_state;
 
-            if (supports.UNIVERSAL_TRANS) {
-                $(window).bind("popstate", function(e){
-                    // alert(['pop', e.state && [e.state.prev, e.state.next].join('-'), ck.viewport && ck.viewport[0].id].join(', '))
-                    if (ck.sessionLocked) {
+            $(window).bind("hashchange", function(e){
+                //alert(location.href + ', \n' 
+                 //+ e.newURL + ', \n' + e.oldURL + '\n' 
+                 //+ ck._backFromSameUrl + '\n' + ck._preventNextHashEv)
+                if (ck._backFromSameUrl) {
+                    return;
+                }
+                is_hash_change = true;
+                if (ck._preventNextHashEv 
+                        || e.newURL.length >= e.oldURL.length) {
+                    ck._preventNextHashEv = false;
+                    return;
+                }
+                if (ck._sessionLocked) {
+                    window.location.reload(true);
+                    return;
+                }
+                if (rewrite_state) {
+                    //alert(3 + ', ' + rewrite_state)
+                    ck.resetWindowTop();
+                    push_history(rewrite_state);
+                    if (modalCard.isOpened) {
+                        modalCard.close();
+                    } else if (ck._backFromOtherpage) {
+                        //alert(3.1)
+                        ck._backFromOtherpage = false;
+                        ck.changeView(rewrite_state);
+                        ck._sessionLocked = false;
+                        ck.showView();
+                    } else {
+                        //alert(3.2)
+                        back_handler(rewrite_state);
+                    }
+                    rewrite_state = false;
+                    return;
+                }
+                var state = location.hash.split(HASH_SEP).pop();
+                if (state && state !== 'i') {
+                    //alert(3 + ': ' + state)
+                    ck._sessionLocked = false;
+                    rewrite_state = state === MODAL_CARDID && DEFAULT_CARDID 
+                        || state;
+                    var card = $('#' + rewrite_state) || [];
+                    if (!card[0]) {
                         window.location.reload(true);
                         return;
                     }
-                    //clearTimeout(back_timeout);
-                    var loading = ck.viewport[0].id === 'ckLoading'; 
-                    if (e.state) {
-                        if (e.state.next === '_modal_') {
-                            // 11. forward from normal card, show modal card.  alert(11)
-                            if (modalCard.isOpened || loading || !ck.viewport) {
-                                history.back();
-                            } else {
-                                modalCard.set(e.state.opt).open();
-                            }
-                        } else if (modalCard.isOpened) {
-                            // 12. back from modal card.  alert(12)
-                            ck.closeModal();
-                        } else if (loading) {
-                            if (e.state.next === 'ckLoading') {
-                                // 6. back from other page, no GC. 
-                                //    go to 2.  alert(6)
-                                history.back();
-                            } else if (e.state.next) {
-                                // 7. from 6, hide loading immediately.  alert(7)
-                                ck.changeView(e.state.next);
-                                ck.hideLoadingCard();
-                                ck.enableControl();
-                            }
-                        } else if (e.state.prev === ck.viewport[0].id) {
-                            // 3. forward from normal card.  alert(3)
-                            link_handler(e.state.next, e.state.link);
-                        } else if (e.state.next === ck.viewport[0].id){ // @TODO hotfix for chrome
+                    history.back();
+                } else {
+                    //alert(4)
+                    back_handler(LOADING_CARDID);
+                }
+            });
+
+            $(window).bind("popstate", function(){
+                if (ck._backFromSameUrl) {
+                    var state = window.location.hash.split(HASH_SEP).pop();
+                    //alert('10.2: ' + state)
+                    if (!state) {
+                        window.location.reload();
+                        return;
+                    }
+                    history.back();
+                    return;
+                }
+                is_hash_change = false;
+                setTimeout(function(){
+                    //alert(10.1 + ': ' + location.href + ', ' + is_hash_change + ', ' + ck._backFromSameUrl)
+                    if (!is_hash_change && !ck._backFromOtherpage) {
+                        //alert(10 +': ' + location.href + ', ' + ck._backFromSameUrl)
+                        ck._sessionLocked = false;
+                        ck._backFromOtherpage = true;
+                        if (supports.GOBACK_WHEN_POP) {
                             history.back();
                         } else {
-                            // 2. back from normal card.  alert(2)
-                            back_handler(e.state.next);
+                            window.location.reload(true);
                         }
-                    } else if (loading) {
-                        // 5. forward from other page, no GC.  alert(5)
-                        history.forward();
-                    } else { 
-                        // 4. back to other page, shift left and show loading.
-                        //    if no GC: go to 6.
-                        //    if no prev page: reload, go to 8
-                        //    else: go to 8.  alert(4)
-                        back_handler('ckLoading');
                     }
+                }, 100);
+            });
+
+        },
+
+        initState: function(){
+
+            ck._sessionLocked = false;
+
+            if (supports.BROWSER_CONTROL) {
+                ck.initStateWatcher();
+            } else {
+                bus.once('inited', function(){
+                    var BACK_EVENT = !supports.NO_POP_ON_CACHED_PAGE ? "popstate" : "resize";
+                    $(window).bind(BACK_EVENT, function(){
+                        if (supports.RESIZE_WHEN_SCROLL
+                                && !ck._pageCached) {
+                            return;
+                        }
+                        ck._pageCached = false;
+                        ck.hideTopbar();
+                        ck.viewport.hide();
+                        ck.changeView(ck.loadingCard);
+                        setTimeout(function(){
+                            window.location.reload();
+                        }, 20);
+                    });
                 });
-
-                //console.info('is_back: ', is_back)
-                //console.info('is_lastadd: ', is_lastadd)
-                //console.info('is_refresh: ', is_refresh)
-                //console.info('url: ', url)
-                //console.info('ref: ', ref)
-                //console.warn('lasturl: ', lasturl)
-                //console.info('index: ', current, footprint.indexOf(url))
-                //console.info('data: ', footprint)
-
-                travel_history = check_footprint();
-
-                var current_state = history.state;
-                restore_state = current_state && current_state.next; // alert(['init', current_state && [current_state.prev, current_state.next].join('-'), ck.viewport && ck.viewport[0].id].join(', '))
-                if (restore_state === '_modal_') {
-                    restore_state = current_state.prev;
-                    restore_modal = true;
-                }
-
-                //console.info(travel_history, restore_state, current_state)
-
-            } else if (supports.PREVENT_CACHE) {
-
-                $(window).bind("popstate", function(){
-                    ck.hideTopbar();
-                    ck.viewport.hide();
-                    ck.changeView(ck.loadingCard);
-                    setTimeout(function(){
-                        window.location.reload();
-                    }, 100);
-                });
-
             }
 
-            if (restore_state) {
-                // 1. reload from normal card.  alert(1)
-                ck.changeView(restore_state);
-                if (restore_state === 'ckLoading') {
-                    if (document.referrer === location.href) {
-                        // alert(9.1)
-                        ck.changeView(ck.defaultCard);
-                    } else {
-                        // 9.  alert(9)
-                        history.back();
+            var last_state,
+                last_is_modal,
+                card_states = location.hash.replace(/^#/, '');
+            if (card_states) {
+                card_states = card_states.split(HASH_SEP);
+            }
+            if (card_states) {
+                var valid_states = [];
+                card_states = card_states.map(function(next_id){
+                    if (next_id === MODAL_CARDID
+                            || next_id === 'i'
+                            || (next_id && $('#' + next_id) || [])[0]) {
+                        valid_states.push(HASH_SEP + next_id);
+                        return next_id;
                     }
-                } else if (restore_modal && !modalCard.isOpened) {
-                    modalCard.set(history.state.opt).open();
+                }).filter(function(next_id){
+                    return next_id;
+                });
+                last_state = card_states.pop();
+                valid_states = valid_states.join('');
+                if ('#' + valid_states !== location.hash) {
+                    replace_hash(CLEARED_HASH + valid_states);
+                    if (!supports.REPLACE_HASH) {
+                        return window.location.reload();
+                    }
+                }
+                if (!supports.BROWSER_CONTROL) {
+                    if (last_state === LOADING_CARDID
+                            || last_state === MODAL_CARDID) {
+                        last_state = null;
+                    }
+                }
+                if (last_state === MODAL_CARDID) {
+                    last_is_modal = true;
+                    last_state = DEFAULT_CARDID;
+                } else if (last_state === 'i') {
+                    last_state = null;
+                }
+            }
+            //alert(0 + ': ' + document.referrer + ' , ' + location.href + ', ' + compare_link(document.referrer))
+            if (supports.BROWSER_CONTROL
+                    && supports.REPLACE_HASH
+                    && !compare_link(document.referrer)) {
+                replace_hash(CLEARED_HASH);
+                if (last_state) {
+                    card_states.forEach(function(next_id){
+                        if (next_id !== 'i') {
+                            push_history(next_id);
+                        }
+                    });
+                    push_history(last_state);
+                }
+            }
+
+            if (last_state) {
+                //alert(2);
+                ck.changeView(last_state);
+                if (last_state === LOADING_CARDID || last_is_modal) {
+                    //alert(2.1 + ': ' + document.referrer)
+                    ck._backFromOtherpage = true;
+                    history.back();
+                } else {
+                    ck.showView();
                 }
             } else {
-                if (travel_history) {
-                    // 8.  alert(8)
-                    ck.changeView(ck.loadingCard);
-                    history.forward();
-                    //setTimeout(function(){
-                        //if (ck.viewport === ck.loadingCard) {
-                            //ck.initNewPage();
-                        //}
-                    //}, 100);
-                } else {
-                    // 0.  alert(0)
-                    ck.initNewPage();
-                }
+                //alert(1)
+                ck.initNewPage();
             }
-
+        
         },
 
         initNewPage: function(){
             ck.changeView(ck.defaultCard);
-            push_history(ck.loadingCard[0].id, ck.defaultCard[0].id);
+            push_history(DEFAULT_CARDID);
+            ck.showView();
         },
 
         initView: function(card, opt){
@@ -722,16 +817,20 @@ define([
 
         changeView: function(card, opt){
             opt = opt || {};
+            if (!supports.CARD_SCROLL && !opt.preventScroll) {
+                ck.resetWindowTop();
+            }
             this.releaseView(opt);
             if (typeof card === 'string') {
                 card = $('#' + card);
             }
             var is_loading = card === this.loadingCard;
+            if (this.viewport) {
+                card.data('prevCard', this.viewport[0].id);
+            }
             this.initView(card, opt);
             this.viewport = card.show();
-            if (!is_loading) {
-                this.updateSize(opt);
-            }
+            this.updateSize(opt);
             if (!opt.isModal && !opt.isActions) {
                 this.updateHeader();
             }
@@ -794,8 +893,7 @@ define([
 
         hideLoadingCard: function() {
             ck.loadingCard.hide().css({
-                position: 'static',
-                height: window.innerHeight + 'px'
+                position: 'static'
             });
             ck.showTopbar();
         },
@@ -819,7 +917,7 @@ define([
                 this.loadingCard.find('div')[0].style.visibility = 'hidden';
                 if (supports.HIDE_TOPBAR
                         && (supports.CARD_SCROLL || !this.sizeInited)) {
-                    window.scrollTo(0, -1);
+                    ck.resetWindowTop();
                     body.scrollTop = 0;
                     //if (screen.availHeight - ck.viewport[0].offsetHeight 
                             //> ck.headerHeight + 10) {
@@ -833,6 +931,12 @@ define([
                 this.windowFullHeight = window.innerHeight;
                 ck.updateSize();
                 this.loadingCard.find('div')[0].style.visibility = '';
+            }
+        },
+
+        resetWindowTop: function(){
+            if (supports.HIDE_ADDRESSBAR) {
+                window.scrollTo(0, -1);
             }
         },
 
@@ -884,13 +988,14 @@ define([
             this.hideAddressbar();
             this.disableControl();
             if (!modalCard.isOpened) {
-                push_history(ck.viewport[0].id, '_modal_', false, opt);
+                push_history(MODAL_CARDID);
             }
             modalCard.set(opt).open();
         },
 
         closeModal: function(){
-            modalCard.close();
+            modalCard.cancel();
+            return modalCard.event.promise('close');
         },
 
         alert: function(text, opt) {
@@ -910,6 +1015,12 @@ define([
                 cancelText: '取消',
                 multiselect: true
             }, opt)).open().event.once('confirm', cb);
+        },
+
+        notify: function(content, opt) {
+            ck.growl(_.mix({
+                content: content
+            }, opt)).open();
         },
 
         openURL: open_url,
@@ -944,7 +1055,7 @@ define([
             pos = n - Math.floor(n),
             list = $('.ck-list', self)[0],
             l = $('.ck-item', list).length - 1;
-        if (n > 0 && n < l) {
+        if (n > 0 && (n < l && l - n > 0.1)) {
             if (is_forward) {
                 if (pos < 0.1) {
                     n = Math.floor(n);
@@ -974,69 +1085,93 @@ define([
     //function clear_active_item_mask(card){
         //card.find('.ck-link-mask-active').removeClass('ck-link-mask-active');
     //}
-
-    function link_handler(next_id, true_link){
-        if (modalCard.isOpened) {
-            modalCard.event.once('close', function(){
-                link_handler(next_id, true_link);
+    
+    function compare_link(href){
+        return href.replace(/#.*/, '') === location.href.replace(/#.*/, '');
+    }
+    
+    function check_inner_link(href){
+        var next_id,
+            current_id,
+            next = href.replace(/#(.*)/, function($0, $1){
+                next_id = $1;
+                return '';
+            }),
+            current = location.href.replace(/#(.*)/, function($0, $1){
+                current_id = $1 || '';
+                return '';
             });
-            ck.closeModal();
+        if (next_id && next === current) {
+            next = next_id && $('#' + next_id) || [];
+            if (!next[0]) {
+                next_id = DEFAULT_CARDID;
+                if (current_id.split(HASH_SEP).pop() === next_id) {
+                    return false;
+                }
+            }
+        } else {
+            next_id = '';
+        }
+        return next_id;
+    }
+
+    function link_handler(e){
+        var me = e.target;
+        while (!me.href) {
+            me = me.parentNode;
+        }
+        var next_id = check_inner_link(me.href);
+        if (next_id === false) {
             return;
         }
-        var me, is_forward = typeof next_id === 'string';
-        if (!is_forward) {
-            me = next_id.target;
-            next_id = '';
-            while (!me.href) {
-                me = me.parentNode;
-            }
-            if ($(me).hasClass('ck-link-extern')) {
-                open_url(me.href, {
-                    target: '_blank'
-                });
-                return;
-            } else if ($(me).hasClass('ck-link')) {
-                next_id = (me.href.replace(location.href, '')
-                    .match(/^#(.+)/) || [])[1];
-            } else if (/(^|\s)ck-\w+/.test(me.className)) {
-                return;
-            } else if (me.target) {
+        if ($(me).hasClass('ck-link-extern')) {
+            open_url(me.href, {
+                target: '_blank'
+            });
+            return;
+        } else if ($(me).hasClass('ck-link')) {
+        } else if (/(^|\s)ck-\w+/.test(me.className)) {
+            return;
+        } else if (me.target) {
+            if (next_id && me.target === '_self') {
+                forward_handler(next_id, null, true);
+            } else {
                 open_url(me.href, me);
-                return;
             }
+            return;
         }
+        if (next_id) {
+            forward_handler(next_id);
+        } else {
+            forward_handler(LOADING_CARDID, me.href);
+        }
+    }
+
+    function forward_handler(next_id, true_link, is_load){
+        ck.disableControl();
+        if (modalCard.isOpened) {
+            ck.closeModal().done(function(){
+                forward_handler(next_id, true_link);
+            });
+            return;
+        }
+        ck._sessionLocked = true;
         var next = next_id && $('#' + next_id);
         if (!next) {
-            if (me) {
-                next_id = 'ckLoading';
-                next = ck.loadingCard;
-                true_link = me.href;
-            } else {
-                return;
-            }
-        }
-        if (!supports.UNIVERSAL_TRANS 
-                && next === ck.loadingCard) {
-            if (true_link) {
-                ck.openURL(true_link);
-            }
-            return;
+            ck.enableControl();
+            ck._sessionLocked = false;
         }
         ck.hideTopbar();
-        ck.sessionLocked = true;
         var current = ck.viewport;
-        if (!is_forward) {
-            push_history(current[0].id, next_id, true_link);
-        }
-        ck.disableControl();
-        if (!supports.UNIVERSAL_TRANS) {
+        push_history(next_id);
+        if (is_load) {
             ck.loadingCard.addClass('moving').show();
             setTimeout(function(){
                 ck.changeView(next);
                 current.hide();
                 ck.loadingCard.hide().removeClass('moving');
                 ck.enableControl();
-                ck.sessionLocked = false;
+                ck._sessionLocked = false;
                 ck.showTopbar();
             }, 400);
             return;
@@ -1056,22 +1191,20 @@ define([
             current.hide();
             ck.cardMask.removeClass('moving');
             next.removeClass('moving');
-            ck.enableControl();
-            ck.sessionLocked = false;
             if (true_link) {
-                if (is_forward) {
-                    history.forward();
-                } else {
-                    clear_footprint();
-                    location.href = true_link;
-                }
+                ck._pageCached = true;
+                window.location = true_link;
             } else {
+                ck.enableControl();
+                ck._sessionLocked = false;
                 ck.showTopbar();
             }
         });
     }
 
     function back_handler(prev_id){
+        ck._sessionLocked = true;
+        ck.disableControl();
         if (actionView.current) {
             actionView.current.close().event.once('close', function(){
                 back_handler(prev_id);
@@ -1079,15 +1212,8 @@ define([
             return;
         }
         ck.hideTopbar();
-        ck.sessionLocked = true;
         var prev = $('#' + prev_id);
         var current = ck.viewport;
-        //if (supports.PREVENT_CACHE && prev === ck.loadingCard) {
-            //ck.sessionLocked = false;
-            //history.back();
-            //return;
-        //}
-        ck.disableControl();
         choreo.transform(current[0], 'translateX', '0px');
         current.addClass('moving');
         ck.changeView(prev);
@@ -1103,89 +1229,36 @@ define([
             ck.cardMask.removeClass('moving');
             current.hide().removeClass('moving');
             choreo.transform(current[0], 'translateX', '0px');
-            ck.enableControl();
-            ck.sessionLocked = false;
-            if (prev_id === 'ckLoading') {
+            if (prev_id === LOADING_CARDID) {
+                //alert('back: ' + document.referrer + '\n' + location.href)
+                if (compare_link(document.referrer)
+                       || !/#.+/.test(document.referrer)) { // redirect.html
+                    ck._backFromSameUrl = true;
+                }
                 history.back();
+                var loc = location.href;
+                setTimeout(function(){
+                    if (location.href === loc) {
+                        location.reload();
+                    }
+                }, 700);
             } else {
+                ck.enableControl();
+                ck._sessionLocked = false;
                 ck.showTopbar();
             }
         });
     }
 
-    function push_history(prev_id, next_id, link, opt){
-        if (supports.UNIVERSAL_TRANS) {
-            history.pushState({
-                prev: prev_id,
-                next: next_id,
-                link: link,
-                opt: opt,
-                i: history.length
-            }, document.title, location.href);
+    function push_history(next_id){
+        if (supports.BROWSER_CONTROL) {
+            window.location = location.href.replace(/#(.*)|$/, '#$1' + HASH_SEP + next_id);
         }
     }
 
-    function check_footprint(){
-        var footprint = sessionStorage['ck_footprint'];
-        try {
-            footprint = footprint && JSON.parse(footprint) || [];
-        } catch(ex) {
-            footprint = [];
-        }
-        var url = location.href,
-            ref = document.referrer,
-            lasturl = sessionStorage['ck_lasturl'],
-            current = footprint.lastIndexOf(url),
-            is_refresh = lasturl === url && ref !== url,
-            is_first = url === footprint[0],
-            is_lastadd = url === footprint[footprint.length - 1],
-            is_back = lasturl && lasturl !== ref && !is_refresh;
-        if ((is_back || is_refresh) && is_first) {
-            return;
-        }
-        if (ref) {
-            if (ref === url) {
-                footprint.length = 0;
-                footprint.push(url);
-            } else if (!is_back && ref === footprint[footprint.length - 1]) {
-                if (current !== -1) { 
-                    footprint.splice(0, current + 1);
-                }
-                footprint.push(url);
-            } else if (is_back && lasturl === footprint[0]) {
-                if (current !== -1) { 
-                    footprint.length = current - 1;
-                }
-                footprint.unshift(url);
-            } else if (ref === footprint[current - 1]) {
-                return true; // travel_history
-            } else if (ref === footprint[footprint.length - 2]
-                    && is_lastadd && !is_back) {
-                return;
-            } else {
-                footprint.length = 0;
-                footprint.push(url);
-            }
-        } else if (is_lastadd) {
-            return;
-        } else {
-            footprint.length = 0;
-            footprint.push(url);
-        }
-        sessionStorage['ck_footprint'] = JSON.stringify(footprint);
-        //console.warn('changed: ', sessionStorage['ck_footprint'])
-    }
-
-    function clear_footprint(){
-        var footprint = sessionStorage['ck_footprint'];
-        try {
-            footprint = footprint && JSON.parse(footprint) || [];
-        } catch(ex) {
-            footprint = [];
-        }
-        var url = location.href;
-        footprint.length = footprint.indexOf(url) + 1;
-        sessionStorage['ck_footprint'] = JSON.stringify(footprint);
+    function replace_hash(hash){
+        ck._preventNextHashEv = true;
+        location.replace(location.href.replace(/#.*/, '') + (hash || CLEARED_HASH));
     }
 
     function prevent_window_scroll(){
@@ -1212,39 +1285,28 @@ define([
 
     function open_url(true_link, opt){
         opt = opt || { target: '_self' };
-        if (modalCard.isOpened) {
-            modalCard.event.once('close', function(){
-                open_url(true_link, opt);
-            });
-            ck.closeModal();
-            return;
-        }
         if (opt.target !== '_self') {
             open_window(true_link, opt.target);
         } else {
-            if (!supports.UNIVERSAL_TRANS) {
-                if (supports.PREVENT_CACHE) {
-                    ck.hideTopbar();
-                    ck.viewport.hide();
-                    ck.changeView(ck.loadingCard);
-                }
-                location.href = true_link;
+            ck.disableControl();
+            if (modalCard.isOpened) {
+                ck.closeModal().done(function(){
+                    open_url(true_link, opt);
+                });
                 return;
             }
+            ck._sessionLocked = true;
             ck.hideTopbar();
-            ck.sessionLocked = true;
-            var next_id = 'ckLoading';
             var next = ck.loadingCard;
             var current = ck.viewport;
-            ck.disableControl();
-            clear_footprint();
-            push_history(current[0].id, next_id, true_link);
+            push_history(LOADING_CARDID);
+            next.addClass('moving');
             ck.changeView(next);
             setTimeout(function(){
                 current.hide();
-                ck.enableControl();
-                ck.sessionLocked = false;
-                location.href = true_link;
+                next.removeClass('moving');
+                ck._pageCached = true;
+                window.location = true_link;
             }, 10);
         }
     }

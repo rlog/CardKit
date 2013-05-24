@@ -7,35 +7,44 @@ define([
     './tpl/unit/list',
     './tpl/unit/mini',
     './tpl/unit/form',
+    './tpl/unit/banner',
     './tpl/unit/blank',
     './parser/box',
     './parser/list',
     './parser/mini',
     './parser/form',
-    './supports'
+    './parser/banner'
 ], function($, _, tpl, 
-    tpl_box, tpl_list, tpl_mini, tpl_form, tpl_blank,
-    boxParser, listParser, miniParser, formParser,
-    supports){
+    tpl_box, tpl_list, tpl_mini, tpl_form, tpl_banner, tpl_blank,
+    boxParser, listParser, miniParser, formParser, bannerParser){
 
     var SCRIPT_TAG = 'script[type="text/cardscript"]',
 
-        TPL_TIPS = '<div class="ck-top-tips">'
-        + (supports.HIDE_TOPBAR ? '长按顶部导航条，可拖出浏览器地址栏' : '')
-        + '</div>';
+        TPL_BLANK_BANNER = '<div class="ck-banner-unit"></div>';
 
     var exports = {
 
         initCard: function(card, raw, footer, opt) {
 
-            var units = card.find('.ck-box-unit, .ck-mini-unit, .ck-list-unit, .ck-form-unit'),
+            if (!opt.isModal) {
+
+                card.find(SCRIPT_TAG).forEach(run_script, card[0]);
+                card.trigger('card:loaded', {
+                    card: card
+                });
+
+                var banner_cfg = card.find('.ck-banner-unit');
+                if (!banner_cfg[0]) {
+                    banner_cfg = $(TPL_BLANK_BANNER);
+                }
+                card.prepend(banner_cfg);
+
+            }
+
+            var units = card.find('.ck-box-unit, .ck-mini-unit, .ck-list-unit, .ck-form-unit, .ck-banner-unit'),
                 config = {
                     blank: card.data('cfgBlank')
                 };
-
-            if (!opt.isModal) {
-                card.find(SCRIPT_TAG + '[data-hook="source"]').forEach(run_script);
-            }
 
             var has_content = exports.initUnit(units, raw);
 
@@ -47,11 +56,11 @@ define([
 
             if (!opt.isModal) {
 
-                card.append(footer.clone())
-                    .prepend($('.ck-banner-unit', card))
-                    .prepend(TPL_TIPS);
+                card.append(footer.clone());
 
-                card.find(SCRIPT_TAG + '[data-hook="ready"]').forEach(run_script);
+                card.trigger('card:ready', {
+                    card: card
+                });
 
             }
 
@@ -59,13 +68,17 @@ define([
 
         openCard: function(card, opt){
             if (!opt.isModal) {
-                card.find(SCRIPT_TAG + '[data-hook="open"]').forEach(run_script);
+                card.trigger('card:open', {
+                    card: card
+                });
             }
         },
 
         closeCard: function(card, opt){
             if (!opt.isModal) {
-                card.find(SCRIPT_TAG + '[data-hook="close"]').forEach(run_script);
+                card.trigger('card:close', {
+                    card: card
+                });
             }
         },
 
@@ -80,6 +93,11 @@ define([
                 }
             });
             return has_content;
+        },
+
+        banner: function(unit, raw){
+            var data = bannerParser(unit, raw);
+            unit.innerHTML = tpl.convertTpl(tpl_banner.template, data, 'data');
         },
 
         box: function(unit, raw){
@@ -158,7 +176,7 @@ define([
     };
 
     function run_script(script){
-        window["eval"].call(window, script.innerHTML);
+        new Function('', script.innerHTML).call(this);
     }
 
     return exports;

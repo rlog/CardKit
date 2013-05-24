@@ -3,7 +3,6 @@ define([
 ], function(browsers){
 
     var window = this,
-        history = window.history,
         document = window.document,
         body = document.body,
         is_android = browsers.os === 'android',
@@ -18,17 +17,35 @@ define([
 
     var exports = {
     
-        HISTORY: 'pushState' in history
-            && !browsers.crios 
-            && !browsers.aosp
-            && !is_mobilefirefox
-            && !is_ios5,
+        //HISTORY: 'pushState' in history
+            //&& !browsers.crios 
+            //&& !browsers.aosp
+            //&& !is_mobilefirefox
+            //&& !is_ios5,
+
+        GOBACK_WHEN_POP: !is_ios5
+            && !browsers.aosp,
+
+        REPLACE_HASH: !browsers.aosp,
+
+        BROWSER_CONTROL: is_desktop
+            || browsers.mobilesafari
+            || browsers.aosp
+            || is_android && browsers.chrome,
+
+        NO_POP_ON_CACHED_PAGE: is_mobilefirefox, 
+
+        RESIZE_WHEN_SCROLL: is_mobilefirefox,
+
+        FIXED_BOTTOM_BUGGY: browsers.crios,
 
         NEW_WIN: !is_ios5 && !browsers.aosp,
 
-        CARD_SCROLL: !browsers.aosp 
-            && !is_ios5
-            && !is_desktop,
+        CARD_SCROLL: !is_desktop
+            && !browsers.aosp
+            && !is_ios5,
+
+        HIDE_ADDRESSBAR: !browsers.crios,
 
         PREVENT_WINDOW_SCROLL: !!browsers.mobilesafari,
 
@@ -39,14 +56,14 @@ define([
     exports.SAFARI_OVERFLOWSCROLL = "webkitOverflowScrolling" in body.style
         && (exports.CARD_SCROLL || is_ios5);
 
-    exports.PREVENT_CACHE = browsers.aosp 
-        || browsers.mobilesafari && !exports.HISTORY;
+    //exports.PREVENT_CACHE = browsers.aosp 
+        //|| browsers.mobilesafari && !exports.HISTORY;
 
-    exports.UNIVERSAL_TRANS = exports.HISTORY
-        && exports.CARD_SCROLL
-        && !browsers.aosp 
-        && !is_ios5
-        && !is_desktop;
+    //exports.UNIVERSAL_TRANS = exports.HISTORY
+        //&& exports.CARD_SCROLL
+        //&& !browsers.aosp 
+        //&& !is_ios5
+        //&& !is_desktop;
 
     exports.WINDOW_SCROLL = !exports.CARD_SCROLL 
         || is_android;

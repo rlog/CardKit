@@ -51,18 +51,9 @@ define([
         return origin_set.call(this, opt);
     };
     
-    if (supports.UNIVERSAL_TRANS) {
+    if (supports.BROWSER_CONTROL) {
         modalCard.ok = modalCard.done = function(){
-            if (!history.state) {
-                history.go(-2);
-            } else {
-                history.back();
-            }
-            return this.event.promise('close');
-        };
-    } else {
-        modalCard.ok = modalCard.done = function(){
-            this.event.fire('needclose');
+            history.back();
             return this.event.promise('close');
         };
     }
