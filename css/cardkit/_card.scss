@@ -57,37 +57,53 @@
     display:block;
     margin:0;
     width:100%;
-    position:fixed;
-    bottom:50px;
-    left:0;
-    padding:5px 0;
-    //@include display-box;
-    //@include box-orient(vertical);
-    //@include box-pack(center);
-    //@include box-align(center);
-    //@include box-direction(reverse);
+    //position:fixed;
+    //bottom:50px;
+    //left:0;
+    //padding:5px 0;
+    height:100%;
+    @include display-box;
+    @include box-orient(vertical);
+    @include box-pack(center);
+    @include box-align(center);
+    @include box-direction(reverse);
   }
 
-  span {
-    width:20px;
-    height:20px;
-    background:#666;
-    display:inline-block;
-    margin:5px;
-    font-size:0;
-    @include border-radius(10px);
-    @include transform-origin(50% 50%);
-    @include animation(loading-dot 1.5s steps(1, start) 0.5s infinite);
-
-    &:first-child {
-      @include animation(loading-dot 1.5s steps(1, start) 0s infinite);
+  p:last-child {
+    background: {
+      image: inline-image('loading.png');
+      repeat: no-repeat;
+      position: center;
+      //size: 96px 96px;
+      //size: 48px 48px;
     }
-
-    &:last-child {
-      @include animation(loading-dot 1.5s steps(1, start) 1s infinite);
-    }
-
+    width:100%;
+    padding:145px 0 0 0;
+    font-size:20px;
+    text-indent:8px;
+    color:#b2b2b2;
   }
+
+  //span {
+    //width:20px;
+    //height:20px;
+    //background:#666;
+    //display:inline-block;
+    //margin:5px;
+    //font-size:0;
+    //@include border-radius(10px);
+    //@include transform-origin(50% 50%);
+    //@include animation(loading-dot 1.5s steps(1, start) 0.5s infinite);
+
+    //&:first-child {
+      //@include animation(loading-dot 1.5s steps(1, start) 0s infinite);
+    //}
+
+    //&:last-child {
+      //@include animation(loading-dot 1.5s steps(1, start) 1s infinite);
+    //}
+
+  //}
   
   .ck-footer {
     display:none;
