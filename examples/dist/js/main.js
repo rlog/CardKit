@@ -610,69 +610,6 @@ if (!window.window) { // for nodejs
 require.config({ enable_ozma: true });
 
 
-/* @source mo/domready.js */;
-
-/**
- * Non-plugin implementation of cross-browser DOM ready event
- * Based on OzJS's built-in module -- 'finish'
- *
- * using AMD (Asynchronous Module Definition) API with OzJS
- * see http://ozjs.org for details
- *
- * Copyright (C) 2010-2012, Dexter.Yy, MIT License
- * vim: et:ts=4:sw=4:sts=4
- */
-define("mo/domready", [
-  "finish"
-], function(finish){
-    var loaded, 
-        w = this, 
-        doc = w.document, 
-        ADD = "addEventListener",
-        IEADD = "attachEvent",
-        READY = "DOMContentLoaded", 
-        CHANGE = "onreadystatechange";
-
-    if (doc.readyState === "complete") {
-        setTimeout(finish, 1);
-    } else {
-        if (doc[ADD]){
-            loaded = function(){
-                doc.removeEventListener("READY", loaded, false);
-                finish();
-            };
-            doc[ADD](READY, loaded, false);
-            w[ADD]("load", finish, false);
-        } else if (doc[IEADD]) {
-            loaded = function(){
-                if (doc.readyState === "complete") {
-                    doc.detachEvent(CHANGE, loaded);
-                    finish();
-                }
-            };
-            doc[IEADD](CHANGE, loaded);
-            w[IEADD]("load", finish);
-            var toplevel = false;
-            try {
-                toplevel = w.frameElement == null;
-            } catch(e) {}
-
-            if (doc.documentElement.doScroll && toplevel) {
-                var check = function(){
-                    try {
-                        doc.documentElement.doScroll("left");
-                    } catch(e) {
-                        setTimeout(check, 1);
-                        return;
-                    }
-                    finish();
-                };
-                check();
-            }
-        }
-    }
-});
-
 /* @source mo/browsers.js */;
 
 /**
@@ -804,6 +741,69 @@ define("mo/browsers", [], function(){
 
 });
 
+/* @source mo/domready.js */;
+
+/**
+ * Non-plugin implementation of cross-browser DOM ready event
+ * Based on OzJS's built-in module -- 'finish'
+ *
+ * using AMD (Asynchronous Module Definition) API with OzJS
+ * see http://ozjs.org for details
+ *
+ * Copyright (C) 2010-2012, Dexter.Yy, MIT License
+ * vim: et:ts=4:sw=4:sts=4
+ */
+define("mo/domready", [
+  "finish"
+], function(finish){
+    var loaded, 
+        w = this, 
+        doc = w.document, 
+        ADD = "addEventListener",
+        IEADD = "attachEvent",
+        READY = "DOMContentLoaded", 
+        CHANGE = "onreadystatechange";
+
+    if (doc.readyState === "complete") {
+        setTimeout(finish, 1);
+    } else {
+        if (doc[ADD]){
+            loaded = function(){
+                doc.removeEventListener("READY", loaded, false);
+                finish();
+            };
+            doc[ADD](READY, loaded, false);
+            w[ADD]("load", finish, false);
+        } else if (doc[IEADD]) {
+            loaded = function(){
+                if (doc.readyState === "complete") {
+                    doc.detachEvent(CHANGE, loaded);
+                    finish();
+                }
+            };
+            doc[IEADD](CHANGE, loaded);
+            w[IEADD]("load", finish);
+            var toplevel = false;
+            try {
+                toplevel = w.frameElement == null;
+            } catch(e) {}
+
+            if (doc.documentElement.doScroll && toplevel) {
+                var check = function(){
+                    try {
+                        doc.documentElement.doScroll("left");
+                    } catch(e) {
+                        setTimeout(check, 1);
+                        return;
+                    }
+                    finish();
+                };
+                check();
+            }
+        }
+    }
+});
+
 /* @source ../cardkit/supports.js */;
 
 define("../cardkit/supports", [
@@ -834,7 +834,8 @@ define("../cardkit/supports", [
         GOBACK_WHEN_POP: !is_ios5
             && !browsers.aosp,
 
-        REPLACE_HASH: !browsers.aosp,
+        REPLACE_HASH: !is_ios5
+            && !browsers.aosp,
 
         BROWSER_CONTROL: is_desktop
             || browsers.mobilesafari
@@ -848,11 +849,11 @@ define("../cardkit/supports", [
 
         FIXED_BOTTOM_BUGGY: browsers.crios,
 
-        NEW_WIN: !is_ios5 && !browsers.aosp,
+        NEW_WIN: !is_ios5 
+            && !browsers.aosp,
 
         CARD_SCROLL: !is_desktop
-            && !browsers.aosp
-            && !is_ios5,
+            && !browsers.aosp,
 
         HIDE_ADDRESSBAR: !browsers.crios,
 
@@ -1562,16 +1563,15 @@ define("dollar/origin", [
         };
     }, ext);
 
-    ['splice', 'concat'].forEach(function(method){
-        var origin = this['_' + method] = this[method];
-        this[method] = function(){
-            return $(origin.apply(this._slice(), _array_map.call(
-                arguments, function(i){
-                    return i._slice();
-                })
-            ));
-        };
-    }, ext);
+    var origin_concat = ext._concat = ext.concat;
+    ext.concat = function(){
+        return $(origin_concat.apply(this._slice(), check_array_argument(arguments)));
+    };
+
+    var origin_splice = ext._splice = ext.splice;
+    ext.splice = function(){
+        return $(origin_splice.apply(this, check_array_argument(arguments)));
+    };
 
     _.mix(ext, {
 
@@ -2246,6 +2246,16 @@ define("dollar/origin", [
         return insert_nodes(action);
     }
 
+    function check_array_argument(args){
+        return _array_map.call(args, function(i){
+            if (typeof i === 'object') {
+                return i._slice();
+            } else {
+                return i;
+            }
+        });
+    }
+
     // public static API
 
     $.find = $;
@@ -2314,6 +2324,8 @@ define("../cardkit/parser/util", [
 
         getOuterHTML: getOuterHTML,
 
+        replaceOuterHTML: replaceOuterHTML,
+
         getCustom: getCustom,
 
         getHd: getHd,
@@ -2362,6 +2374,20 @@ define("../cardkit/parser/util", [
                 }
             });
         }, $).join('');
+    }
+
+    function replaceOuterHTML(target, nodes, name){
+        return nodes.forEach(function(elm){
+            var html = elm.outerHTML;
+            html = html.replace(RE_CKD_NAME, function($0, $1, $2){ 
+                if ($2 === name) {
+                    return $1 + 'ck-' + $2;
+                } else {
+                    return $0;
+                }
+            });
+            this.replaceWith(html);
+        }, target);
     }
 
     function getCustom(tag, unit, raw, fn, ckdname){
@@ -2478,6 +2504,73 @@ define("../cardkit/parser/util", [
     function getItemDataOuter(source, custom, ckdname){
         source = $(source);
         return getOuterHTML(source, ckdname);
+    }
+
+    return exports;
+
+});
+
+/* @source ../cardkit/parser/navdrawer.js */;
+
+
+define("../cardkit/parser/navdrawer", [
+  "dollar",
+  "mo/lang",
+  "../cardkit/parser/util"
+], function($, _, util){
+    
+    var getCustom = util.getCustom,
+        getHd = util.getHd,
+        getItemDataOuter = util.getItemDataOuter;
+
+    function exports(cfg, raw){
+        cfg = $(cfg);
+        var source = util.getSource(cfg, raw),
+            config = {},
+            hd = getHd(source && source.find('.ckd-hd')),
+            contents = source && source.find('.ckd-content').map(function(elm){
+                return getCustom('.ckd-content', elm, raw, getItemDataOuter, 'content').join('') 
+                    || util.getInnerHTML(elm);
+            }) || $(),
+            custom_hd = getCustom('.ckd-hd', cfg, raw, getHd)[0] || {},
+            custom_contents = getCustom('.ckd-content', cfg, raw, getItemDataOuter, 'content').join('') 
+                    || '';
+        var data = {
+            config: config,
+            hd: custom_hd.html === undefined ? hd.html : custom_hd.html,
+            content: custom_contents + contents.join(''),
+        };
+        return data;
+    }
+
+    return exports;
+
+});
+
+/* @source ../cardkit/parser/actionbar.js */;
+
+
+define("../cardkit/parser/actionbar", [
+  "dollar",
+  "mo/lang",
+  "../cardkit/parser/util"
+], function($, _, util){
+    
+    function exports(cfg, raw){
+        cfg = $(cfg);
+        var source = util.getSource(cfg, raw),
+            config = {
+                limit: cfg.data('cfgLimit') || 1
+            },
+            items = source && source.find('.ckd-item').map(function(elm){
+                return util.getItemDataOuter(elm, null, 'item');
+            }) || $(),
+            custom_items = util.getCustom('.ckd-item', cfg, raw, util.getItemDataOuter, 'item');
+        var data = {
+            config: config,
+            items: custom_items.concat(items || $())
+        };
+        return data;
     }
 
     return exports;
@@ -2684,6 +2777,7 @@ define("../cardkit/parser/box", [
         unit = $(unit);
         var source = util.getSource(unit, raw),
             config = {
+                disableReader: unit.data('cfgDisableReader'),
                 paper: unit.data('cfgPaper'),
                 plain: unit.data('cfgPlain'),
                 plainhd: unit.data('cfgPlainhd')
@@ -2695,7 +2789,7 @@ define("../cardkit/parser/box", [
                 : getHd(source && source.find('.ckd-hd-link')),
             hd_opt = getItemDataOuter(source && source.find('.ckd-hdopt'), 'hdopt'),
             ft = getHd(source && source.find('.ckd-ft')),
-            contents = source && util.getOuterHTML(source.find('.ckd-content')),
+            contents = getItemDataOuter(source && source.find('.ckd-content'), 'content'),
             custom_hd = getCustom('.ckd-hd', unit, raw, take_hd)[0] || {},
             custom_hd_link_extern = getCustom('.ckd-hd-link-extern', unit, raw, take_hd)[0] || {},
             custom_hd_link = custom_hd_link_extern.href 
@@ -2703,7 +2797,7 @@ define("../cardkit/parser/box", [
                 : (getCustom('.ckd-hd-link', unit, raw, take_hd)[0] || {}),
             custom_hd_opt = getCustom('.ckd-hdopt', unit, raw, take_item_outer, 'hdopt').join(''),
             custom_ft = getCustom('.ckd-ft', unit, raw, take_hd)[0] || {};
-        getCustom('.ckd-content', unit, raw, replace_content);
+        getCustom('.ckd-content', unit, raw, replace_content, 'content');
         var data = {
             config: config,
             style: unit.data('style'),
@@ -2724,9 +2818,16 @@ define("../cardkit/parser/box", [
         return data;
     }
 
-    function replace_content(source, custom){
+    function replace_content(source, custom, ckdname){
         if (custom) {
-            $(custom).replaceWith(source.clone());
+            util.replaceOuterHTML($(custom), source, ckdname);
+        } else {
+            source = $(source);
+            if (!/\S/.test(source.html() || '')) {
+                source.remove();
+            } else {
+                util.replaceOuterHTML(source, source, ckdname);
+            }
         }
     }
 
@@ -2746,6 +2847,20 @@ define("../cardkit/parser/box", [
 
 });
 
+/* @source ../cardkit/tpl/layout/actionbar.js */;
+
+define("../cardkit/tpl/layout/actionbar", [], function(){
+
+    return {"template":"\n{% if (actionbar.overflowItems.length) { %}\n<button type=\"button\" class=\"ck-top-overflow ck-item\"></button>\n{% } %}\n\n{% actionbar.items.reverse().forEach(function(item){ %}\n\n    {%=(item)%}\n\n{% }); %}\n\n<span class=\"ck-top-overflow-items\">\n{% actionbar.overflowItems.forEach(function(item){ %}\n\n    {%=(item)%}\n\n{% }); %}\n</span>\n"}; 
+
+});
+/* @source ../cardkit/tpl/layout/navdrawer.js */;
+
+define("../cardkit/tpl/layout/navdrawer", [], function(){
+
+    return {"template":"\n{% if (navdrawer.hd) { %}\n<header>{%=navdrawer.hd%}</header>\n{% } %}\n\n<article>\n    <div class=\"ck-nav-wrap\">\n        <div class=\"ck-nav-content\">{%=navdrawer.content%}</div>\n        <div class=\"ck-footer\"></div>\n    </div>\n</article>\n\n"}; 
+
+});
 /* @source ../cardkit/tpl/unit/blank.js */;
 
 define("../cardkit/tpl/unit/blank", [], function(){
@@ -2785,7 +2900,7 @@ define("../cardkit/tpl/unit/list", [], function(){
 
 define("../cardkit/tpl/unit/box", [], function(){
 
-    return {"template":"\n{% function hd(){ %}\n    {% if (data.hd) { %}\n    <header class=\"ck-hd-wrap\">\n\n        <span class=\"ck-hd {%= (data.hd_url && 'clickable' || '') %}\">\n            {% if (data.hd_url) { %}\n            <a href=\"{%= data.hd_url %}\" class=\"ck-link ck-link-mask {%= (data.hd_url_extern ? 'ck-link-extern' : '') %}\"></a>\n            {% } %}\n            <span>{%= data.hd %}</span>\n        </span>\n\n        {% if (data.hd_opt) { %}\n        <div class=\"ck-hdopt-wrap\">{%=data.hd_opt%}</div>\n        {% } %}\n\n    </header>\n    {% } %}\n{% } %}\n\n{% if (data.config.plain || data.config.plainhd) { %}\n    {%= hd() %}\n{% } %}\n\n<article class=\"ck-unit-wrap\">\n\n    {% if (!data.config.plain && !data.config.plainhd) { %}\n        {%= hd() %}\n    {% } %}\n\n    {% if (data.hasContent) { %}\n    <section>{%= data.content %}</section>\n    {% } %}\n\n    {% if (data.ft) { %}\n    <footer>{%= data.ft %}</footer>\n    {% } %}\n\n</article>\n"}; 
+    return {"template":"\n{% function hd(){ %}\n    {% if (data.hd) { %}\n    <header class=\"ck-hd-wrap\">\n\n        <span class=\"ck-hd {%= (data.hd_url && 'clickable' || '') %}\">\n            {% if (data.hd_url) { %}\n            <a href=\"{%= data.hd_url %}\" class=\"ck-link ck-link-mask {%= (data.hd_url_extern ? 'ck-link-extern' : '') %}\"></a>\n            {% } %}\n            <span>{%= data.hd %}</span>\n        </span>\n\n        {% if (data.hd_opt) { %}\n        <div class=\"ck-hdopt-wrap\">{%=data.hd_opt%}</div>\n        {% } %}\n\n    </header>\n    {% } %}\n{% } %}\n\n{% if (data.config.plain || data.config.plainhd) { %}\n    {%= hd() %}\n{% } %}\n\n<article class=\"ck-unit-wrap\">\n\n    {% if (!data.config.plain && !data.config.plainhd) { %}\n        {%= hd() %}\n    {% } %}\n\n    {% if (data.hasContent) { %}\n    <section>\n        {% if (data.config.disableReader) { %}\n        <script type=\"text/template\" class=\"ckd-delay-content\">\n        {%= data.content %}\n        </script>\n        {% } else { %}\n        {%= data.content %}\n        {% } %}\n    </section>\n    {% } %}\n\n    {% if (data.ft) { %}\n    <footer>{%= data.ft %}</footer>\n    {% } %}\n\n</article>\n"}; 
 
 });
 /* @source mo/template/string.js */;
@@ -2959,16 +3074,28 @@ define("../cardkit/render", [
   "../cardkit/tpl/unit/form",
   "../cardkit/tpl/unit/banner",
   "../cardkit/tpl/unit/blank",
+  "../cardkit/tpl/layout/navdrawer",
+  "../cardkit/tpl/layout/actionbar",
   "../cardkit/parser/box",
   "../cardkit/parser/list",
   "../cardkit/parser/mini",
   "../cardkit/parser/form",
-  "../cardkit/parser/banner"
+  "../cardkit/parser/banner",
+  "../cardkit/parser/actionbar",
+  "../cardkit/parser/navdrawer"
 ], function($, _, tpl, 
-    tpl_box, tpl_list, tpl_mini, tpl_form, tpl_banner, tpl_blank,
-    boxParser, listParser, miniParser, formParser, bannerParser){
+    tpl_box, tpl_list, tpl_mini, tpl_form, tpl_banner, tpl_blank, 
+    tpl_navdrawer, tpl_actionbar,
+    boxParser, listParser, miniParser, formParser, 
+    bannerParser, actionbarParser, navdrawerParser){
 
-    var SCRIPT_TAG = 'script[type="text/cardscript"]',
+    var frame_parts = {
+            'navdrawer': navdrawerParser, 
+            'page-actions': actionbarParser,
+            'card-actions': actionbarParser
+        },
+
+        SCRIPT_TAG = 'script[type="text/cardscript"]',
 
         TPL_BLANK_BANNER = '<div class="ck-banner-unit"></div>';
 
@@ -3054,6 +3181,11 @@ define("../cardkit/render", [
             var data = boxParser(unit, raw);
             if (data.hasContent || data.hd) {
                 unit.innerHTML = tpl.convertTpl(tpl_box.template, data, 'data');
+                setTimeout(function(){
+                    $('.ckd-delay-content', unit).forEach(function(tpl){
+                        this(tpl).replaceWith(tpl.innerHTML);
+                    }, $);
+                }, 100);
                 return true;
             } else {
                 $(unit).remove();
@@ -3120,6 +3252,42 @@ define("../cardkit/render", [
             } else {
                 unit.innerHTML = tpl.convertTpl(tpl_form.template, data, 'data');
                 return true;
+            }
+        },
+
+        _frameConfig: {},
+        _frameCustomized: {},
+
+        setFrame: function(card, header, navDrawer, raw){
+            var cfg = this._frameConfig,
+                customized = this._frameCustomized,
+                global_cfg,
+                cfg_node,
+                changed = {};
+            for (var part in frame_parts) {
+                if (!cfg[part] || customized[part]) {
+                    global_cfg = header.find('.ckcfg-' + part);
+                    if (global_cfg[0]) {
+                        cfg[part] = frame_parts[part](global_cfg, raw);
+                        changed[part] = true;
+                    }
+                }
+                cfg_node = card.find('.ckcfg-' + part);
+                customized[part] = !!cfg_node[0];
+                if (customized[part]) {
+                    cfg[part] = frame_parts[part](cfg_node, raw);
+                    changed[part] = true;
+                }
+            }
+            if (changed['page-actions'] || changed['card-actions']) {
+                var actions = cfg['actionbar'] = cfg['card-actions'],
+                    action_items = actions.items;
+                action_items.push.apply(action_items, cfg['page-actions'].items);
+                actions.overflowItems = action_items.splice(actions.config.limit);
+                $('.ck-top-actions').html(tpl.convertTpl(tpl_actionbar.template, cfg));
+            }
+            if (changed['navdrawer']) {
+                navDrawer.html(tpl.convertTpl(tpl_navdrawer.template, cfg));
             }
         }
     
@@ -3501,6 +3669,13 @@ define("../cardkit/tpl/layout/ctlbar", [], function(){
     return {"template":"<div class=\"ck-ctl-bar\">\n    <input type=\"button\" class=\"ck-ctl-backward\">\n    <input type=\"button\" class=\"ck-ctl-forward disabled\">\n    <input type=\"button\" class=\"ck-ctl-reload\">\n</div>\n"}; 
 
 });
+/* @source ../cardkit/tpl/layout/overflowmenu.js */;
+
+define("../cardkit/tpl/layout/overflowmenu", [], function(){
+
+    return {"template":"\n<button type=\"button\" class=\"ck-option\" value=\"{%=item.i%}\">{%=item.text%}</button>\n"}; 
+
+});
 /* @source moui/overlay.js */;
 
 define('moui/overlay', [
@@ -3861,11 +4036,16 @@ define('moui/control', [
             if (this._numField[0]) {
                 this._isNumFieldClose = this._numField.isEmpty();
             }
-            if (this.isEnabled) {
+            if (opt.enableVal === undefined) {
                 opt.enableVal = this.val();
+            }
+            if (opt.enableLabel === undefined) {
                 opt.enableLabel = this.label();
-            } else {
+            }
+            if (opt.disableVal === undefined) {
                 opt.disableVal = this.val();
+            }
+            if (opt.disableLabel === undefined) {
                 opt.disableLabel = this.label();
             }
             this._config = _.config({}, opt, this._defaults);
@@ -4531,8 +4711,6 @@ define("../cardkit/view/actionview", [
                 }
             }
         });
-        if (elm) {
-        }
         return view;
     }
 
@@ -5225,13 +5403,13 @@ define("../cardkit/view/picker", [
             p.showLoading();
             if (controller.isEnabled) {
                 req_opt = {
-                    method: cfg.requestMethod,
+                    method: cfg.enableMethod,
                     url: cfg.enableUrl,
                     jsonUrl: cfg.enableJsonUrl
                 };
             } else {
                 req_opt = {
-                    method: cfg.requestMethod,
+                    method: cfg.disableMethod,
                     url: cfg.disableUrl,
                     jsonUrl: cfg.disableJsonUrl
                 };
@@ -5282,7 +5460,7 @@ define("../cardkit/view/control", [
         enable: function(){
             var cfg = this.data();
             return this.request({
-                method: cfg.requestMethod,
+                method: cfg.enableMethod,
                 url: cfg.enableUrl,
                 jsonUrl: cfg.enableJsonUrl
             }, function(){
@@ -5293,7 +5471,7 @@ define("../cardkit/view/control", [
         disable: function(){
             var cfg = this.data();
             return this.request({
-                method: cfg.requestMethod,
+                method: cfg.disableMethod,
                 url: cfg.disableUrl,
                 jsonUrl: cfg.disableJsonUrl
             }, function(){
@@ -7040,12 +7218,56 @@ define("mo/easing/timing", [
 
 });
 
+/* @source mo/cookie.js */;
+
+/**
+ * using AMD (Asynchronous Module Definition) API with OzJS
+ * see http://ozjs.org for details
+ *
+ * Copyright (C) 2010-2012, Dexter.Yy, MIT License
+ * vim: et:ts=4:sw=4:sts=4
+ */
+define("mo/cookie", [], function(){
+
+    return function(win, n, v, op){
+        if(typeof win == "string") {
+            op = v;
+            v = n;
+            n = win;
+            win = window;
+        }
+        if(v !== undefined) {
+            op = op || {};
+            var date, expires = "";
+            if(op.expires) {
+                if(op.expires.constructor == Date) {
+                    date = op.expires;
+                } else {
+                    date = new Date();
+                    date.setTime(date.getTime() + (op.expires * 24 * 60 * 60 * 1000));
+                }
+                expires = '; expires=' + date.toGMTString();
+            }
+            var path = op.path ? '; path=' + op.path : '';
+            var domain = op.domain ? '; domain=' + op.domain : '';
+            var secure = op.secure ? '; secure' : '';
+            win.document.cookie = [n, '=', encodeURIComponent(v), expires, path, domain, secure].join('');
+        } else {
+            v = win.document.cookie.match( new RegExp( "(?:\\s|^)" + n + "\\=([^;]*)") );
+            return v ? decodeURIComponent(v[1]) : null;
+        }
+    };
+
+});
+
+
 /* @source ../cardkit/app.js */;
 
 define("../cardkit/app", [
   "dollar",
   "mo/lang",
   "mo/browsers",
+  "mo/cookie",
   "mo/template",
   "mo/easing/timing",
   "soviet",
@@ -7061,16 +7283,18 @@ define("../cardkit/app", [
   "../cardkit/view/modalcard",
   "../cardkit/view/actionview",
   "../cardkit/view/growl",
+  "../cardkit/tpl/layout/overflowmenu",
   "../cardkit/tpl/layout/ctlbar",
   "../cardkit/bus",
   "../cardkit/render",
   "../cardkit/supports",
   "cardkit/env",
   "mo/domready"
-], function($, _, browsers, tpl, easing, soviet, choreo, 
+], function($, _, browsers, cookie, tpl, easing, soviet, choreo, 
     momoBase, momoTap, momoSwipe, momoDrag, momoScroll, 
     control, picker, stars, modalCard, actionView, growl, 
-    tpl_ctlbar, bus, render, supports, env){
+    tpl_overflowmenu, tpl_ctlbar, 
+    bus, render, supports, env){
 
     var window = this,
         history = window.history,
@@ -7090,6 +7314,7 @@ define("../cardkit/app", [
         MINI_ITEM_MARGIN = 10,
         MINI_LIST_PADDING = 15,
 
+        TPL_NAVDRAWER = '<div class="ck-navdrawer"></div>',
         TPL_MASK = '<div class="ck-viewmask"></div>',
         TPL_CARD_MASK = '<div class="ck-cardmask"></div>';
 
@@ -7208,12 +7433,31 @@ define("../cardkit/app", [
             window.location.reload();
         },
 
-        '.ck-top-create .btn': open_modal_card,
+        '.ck-top-overflow': function(){
+            var options = $('.ck-top-overflow-items .ck-item').map(function(item, i){
+                return $(tpl.convertTpl(this, {
+                    i: i,
+                    text: $(item).html()
+                }, 'item'))[0];
+            }, tpl_overflowmenu.template);
+            actionView(this, {
+                options: options
+            }).open();
+            bus.bind('actionView:confirmOnThis', function(actionCard){
+                var i = actionCard.val();
+                bus.once('actionView:close', function(){
+                    $('.ck-top-overflow-items .ck-item').eq(i).trigger('tap');
+                });
+            });
+        },
 
-        '.ck-top-action .btn': function(){
-            actionView(this).open();
+        '.ck-top-nav, .ck-top-nav span': function(){
+            if (this.href) {
+                return;
+            }
+            ck.openNavDrawer();
         }
-    
+
     };
 
     function open_modal_card(){
@@ -7357,7 +7601,11 @@ define("../cardkit/app", [
         ck.disableView = true;
         $(body).addClass('modal-view');
     }).bind('close', function(){
-        ck.changeView(last_view_for_modal);
+        ck.changeView(last_view_for_modal, {
+            preventRender: ck._navDrawerLastView,
+            isModal: ck._navDrawerLastView,
+            isNotPrev: true
+        });
         $(body).removeClass('bg');
     //}).bind('needclose', function(){
         //ck.closeModal();
@@ -7384,9 +7632,10 @@ define("../cardkit/app", [
             $(body).removeClass('bg');
         }
         ck.changeView(last_view_for_actions, {
-            preventRender: modalCard.isOpened,
+            isNotPrev: true,
+            preventRender: modalCard.isOpened || ck._navDrawerLastView,
             preventScroll: true,
-            isModal: modalCard.isOpened
+            isModal: modalCard.isOpened || ck._navDrawerLastView
         });
     }).bind('actionView:close', function(){
         if (!modalCard.isOpened) {
@@ -7396,9 +7645,10 @@ define("../cardkit/app", [
             $(body).removeClass('bg');
         }
         ck.changeView(last_view_for_actions, {
-            preventRender: modalCard.isOpened,
+            isNotPrev: true,
+            preventRender: modalCard.isOpened || ck._navDrawerLastView,
             preventScroll: true,
-            isModal: modalCard.isOpened
+            isModal: modalCard.isOpened || ck._navDrawerLastView
         });
     }).bind('actionView:jump', function(actionCard, href, target){
         actionCard.event.once('close', function(){
@@ -7411,6 +7661,7 @@ define("../cardkit/app", [
         init: function(opt){
             var doc = $(document);
             var root = this.root = opt.root;
+            this.mainview = $('.ck-main', root);
             this.wrapper = $('.ck-wrapper', root);
             this.header = $('.ck-header', root);
             if (!supports.BROWSER_CONTROL) {
@@ -7435,7 +7686,8 @@ define("../cardkit/app", [
                     'background': '#0f0'
                 });
             }
-            this.cardMask = $(TPL_CARD_MASK).appendTo(body);
+            this.cardMask = $(TPL_CARD_MASK).appendTo(this.mainview);
+            this.navDrawer = $(TPL_NAVDRAWER).prependTo(root);
             this.headerHeight = this.header.height();
             this.sizeInited = false;
             this.viewportGarbage = {};
@@ -7495,6 +7747,11 @@ define("../cardkit/app", [
                         ck.viewport[0].innerHTML = ck.viewport[0].innerHTML;
                     }
                 }
+            });
+
+            this.cardMask.bind('touchstart', function(e){
+                e.preventDefault();
+                ck.closeNavDrawer();
             });
 
             this.loadingCard.bind('touchstart', function(e){
@@ -7704,8 +7961,7 @@ define("../cardkit/app", [
                     ck._sessionLocked = false;
                     rewrite_state = state === MODAL_CARDID && DEFAULT_CARDID 
                         || state;
-                    var card = $('#' + rewrite_state) || [];
-                    if (!card[0]) {
+                    if (!$('#' + rewrite_state).hasClass('ck-card')) {
                         window.location.reload(true);
                         return;
                     }
@@ -7782,7 +8038,7 @@ define("../cardkit/app", [
                 card_states = card_states.map(function(next_id){
                     if (next_id === MODAL_CARDID
                             || next_id === 'i'
-                            || (next_id && $('#' + next_id) || [])[0]) {
+                            || next_id && $('#' + next_id).hasClass('ck-card')) {
                         valid_states.push(HASH_SEP + next_id);
                         return next_id;
                     }
@@ -7880,16 +8136,15 @@ define("../cardkit/app", [
                 card = $('#' + card);
             }
             var is_loading = card === this.loadingCard;
-            if (this.viewport) {
+            if (this.viewport && !opt.isNotPrev) {
                 card.data('prevCard', this.viewport[0].id);
             }
             this.initView(card, opt);
             this.viewport = card.show();
             this.updateSize(opt);
             if (!opt.isModal && !opt.isActions) {
-                this.updateHeader();
+                this.updateFrame();
             }
-            sessionStorage['ck_lasturl'] = location.href;
             if (!is_loading) {
                 setTimeout(function(){
                     bus.fire('readycardchange', [card]);
@@ -7935,12 +8190,9 @@ define("../cardkit/app", [
             this.scrollGesture.watchScroll(card[0]);
         },
 
-        updateHeader: function(){
-            var top_submit = this.header.find('.ck-top-create').empty();
-            var create_btn = this.viewport.find('.ckd-top-create').html();
-            if (create_btn) {
-                top_submit.append(create_btn);
-            }
+        updateFrame: function(){
+            render.setFrame(this.viewport, this.header, 
+                this.navDrawer, this.raw);
         },
 
         renderUnit: function(node){
@@ -8039,6 +8291,47 @@ define("../cardkit/app", [
                 }
                 this.enableControl();
             }
+        },
+
+        openNavDrawer: function(){
+            if (ck._navDrawerLastView) {
+                return;
+            }
+            ck._navDrawerLastView = ck.viewport;
+            ck.navDrawer.show();
+            ck.changeView(ck.navDrawer.find('article'), {
+                preventRender: true,
+                isNotPrev: true,
+                isModal: true
+            });
+            $(body).addClass('nav-view');
+            //choreo().play().actor(ck.mainview[0], {
+                //'transform': 'translateX(' + (screen.availWidth - 40) + 'px)'
+            //}, 400).follow().then(function(){
+            //});
+        },
+
+        closeNavDrawer: function(){
+            if (!ck._navDrawerLastView) {
+                return;
+            }
+            ck.changeView(ck._navDrawerLastView, {
+                isNotPrev: true
+            });
+            $(body).removeClass('nav-view');
+            setTimeout(function(){
+                ck._navDrawerLastView = false;
+                ck.navDrawer.hide();
+                setTimeout(function(){
+                    bus.fire('navdrawer:close');
+                }, 50);
+            }, 400);
+            //choreo().play().actor(ck.mainview[0], {
+                //'transform': 'translateX(0px)'
+            //}, 400).follow().then(function(){
+
+            //});
+            return bus.promise('navdrawer:close');
         },
 
         openModal: function(opt){
@@ -8160,8 +8453,9 @@ define("../cardkit/app", [
                 return '';
             });
         if (next_id && next === current) {
-            next = next_id && $('#' + next_id) || [];
-            if (!next[0]) {
+            if (!next_id 
+                    || !$('#' + next_id).hasClass('ck-card')
+                    || next_id === ck.viewport[0].id) {
                 next_id = DEFAULT_CARDID;
                 if (current_id.split(HASH_SEP).pop() === next_id) {
                     return false;
@@ -8186,6 +8480,13 @@ define("../cardkit/app", [
             open_url(me.href, {
                 target: '_blank'
             });
+            return;
+        } else if ($(me).hasClass('ck-link-direct')) {
+            if (next_id) {
+                forward_handler(next_id, null, true);
+            } else {
+                open_url(me.href);
+            }
             return;
         } else if ($(me).hasClass('ck-link')) {
         } else if (/(^|\s)ck-\w+/.test(me.className)) {
@@ -8213,11 +8514,19 @@ define("../cardkit/app", [
             });
             return;
         }
+        if (ck._navDrawerLastView) {
+            ck.closeNavDrawer().then(function(){
+                forward_handler(next_id, true_link);
+            });
+            return;
+        }
         ck._sessionLocked = true;
         var next = next_id && $('#' + next_id);
-        if (!next) {
+        if (!next.hasClass('ck-card')
+                || next_id === ck.viewport[0].id) {
             ck.enableControl();
             ck._sessionLocked = false;
+            return;
         }
         ck.hideTopbar();
         var current = ck.viewport;
@@ -8247,7 +8556,7 @@ define("../cardkit/app", [
         }, 450, 'ease');
         moving.follow().then(function(){
             current.hide();
-            ck.cardMask.removeClass('moving');
+            ck.cardMask.removeClass('moving').css('opacity', 0);
             next.removeClass('moving');
             if (true_link) {
                 ck._unexpectStateWhenGoback = false;
@@ -8264,6 +8573,12 @@ define("../cardkit/app", [
     function back_handler(prev_id){
         ck._sessionLocked = true;
         ck.disableControl();
+        if (ck._navDrawerLastView) {
+            ck.closeNavDrawer().then(function(){
+                back_handler(prev_id);
+            });
+            return;
+        }
         if (actionView.current) {
             actionView.current.close().event.once('close', function(){
                 back_handler(prev_id);
@@ -8354,6 +8669,12 @@ define("../cardkit/app", [
                 });
                 return;
             }
+            if (ck._navDrawerLastView) {
+                ck.closeNavDrawer().then(function(){
+                    open_url(true_link, opt);
+                });
+                return;
+            }
             ck._sessionLocked = true;
             ck.hideTopbar();
             var next = ck.loadingCard;
@@ -8420,7 +8741,7 @@ require.config({
 define('mo/easing/functions', [], function(){});
 define('mo/mainloop', [], function(){});
 
-define('cardkit/env', [], function(){
+define('cardkit/env', ['mo/browsers'], function(){
     return {};
 });
 

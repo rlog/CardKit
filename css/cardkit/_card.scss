@@ -4,7 +4,7 @@
   width:100%;
   height:100%;
   background:$view_color;
-  @include box-shadow(1px 0px 2px rgba(0,0,0,.1));
+  @include box-shadow(1px 0px 6px rgba(0,0,0,.6));
   @include user-select(none);
   overflow-y:scroll;
   -webkit-overflow-scrolling: touch;
@@ -17,7 +17,7 @@
     display:block;
   }
 
-  .ckd-top-create {
+  .ckd-top-create { // deprecated
     display:none;
   }
 
@@ -75,11 +75,11 @@
       repeat: no-repeat;
       position: center;
       //size: 96px 96px;
-      //size: 48px 48px;
+      size: 48px 48px;
     }
     width:100%;
-    padding:145px 0 0 0;
-    font-size:20px;
+    padding:75px 0 0 0;
+    font-size:13px;
     text-indent:8px;
     color:#b2b2b2;
   }

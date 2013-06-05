@@ -2,6 +2,7 @@ define([
     'dollar',
     'mo/lang',
     'mo/browsers',
+    'mo/cookie',
     'mo/template',
     'mo/easing/timing',
     'soviet',
@@ -17,16 +18,18 @@ define([
     './view/modalcard',
     './view/actionview',
     './view/growl',
+    './tpl/layout/overflowmenu',
     './tpl/layout/ctlbar',
     './bus',
     './render',
     './supports',
     'cardkit/env',
     'mo/domready'
-], function($, _, browsers, tpl, easing, soviet, choreo, 
+], function($, _, browsers, cookie, tpl, easing, soviet, choreo, 
     momoBase, momoTap, momoSwipe, momoDrag, momoScroll, 
     control, picker, stars, modalCard, actionView, growl, 
-    tpl_ctlbar, bus, render, supports, env){
+    tpl_overflowmenu, tpl_ctlbar, 
+    bus, render, supports, env){
 
     var window = this,
         history = window.history,
@@ -46,6 +49,7 @@ define([
         MINI_ITEM_MARGIN = 10,
         MINI_LIST_PADDING = 15,
 
+        TPL_NAVDRAWER = '<div class="ck-navdrawer"></div>',
         TPL_MASK = '<div class="ck-viewmask"></div>',
         TPL_CARD_MASK = '<div class="ck-cardmask"></div>';
 
@@ -164,12 +168,31 @@ define([
             window.location.reload();
         },
 
-        '.ck-top-create .btn': open_modal_card,
+        '.ck-top-overflow': function(){
+            var options = $('.ck-top-overflow-items .ck-item').map(function(item, i){
+                return $(tpl.convertTpl(this, {
+                    i: i,
+                    text: $(item).html()
+                }, 'item'))[0];
+            }, tpl_overflowmenu.template);
+            actionView(this, {
+                options: options
+            }).open();
+            bus.bind('actionView:confirmOnThis', function(actionCard){
+                var i = actionCard.val();
+                bus.once('actionView:close', function(){
+                    $('.ck-top-overflow-items .ck-item').eq(i).trigger('tap');
+                });
+            });
+        },
 
-        '.ck-top-action .btn': function(){
-            actionView(this).open();
+        '.ck-top-nav, .ck-top-nav span': function(){
+            if (this.href) {
+                return;
+            }
+            ck.openNavDrawer();
         }
-    
+
     };
 
     function open_modal_card(){
@@ -313,7 +336,11 @@ define([
         ck.disableView = true;
         $(body).addClass('modal-view');
     }).bind('close', function(){
-        ck.changeView(last_view_for_modal);
+        ck.changeView(last_view_for_modal, {
+            preventRender: ck._navDrawerLastView,
+            isModal: ck._navDrawerLastView,
+            isNotPrev: true
+        });
         $(body).removeClass('bg');
     //}).bind('needclose', function(){
         //ck.closeModal();
@@ -340,9 +367,10 @@ define([
             $(body).removeClass('bg');
         }
         ck.changeView(last_view_for_actions, {
-            preventRender: modalCard.isOpened,
+            isNotPrev: true,
+            preventRender: modalCard.isOpened || ck._navDrawerLastView,
             preventScroll: true,
-            isModal: modalCard.isOpened
+            isModal: modalCard.isOpened || ck._navDrawerLastView
         });
     }).bind('actionView:close', function(){
         if (!modalCard.isOpened) {
@@ -352,9 +380,10 @@ define([
             $(body).removeClass('bg');
         }
         ck.changeView(last_view_for_actions, {
-            preventRender: modalCard.isOpened,
+            isNotPrev: true,
+            preventRender: modalCard.isOpened || ck._navDrawerLastView,
             preventScroll: true,
-            isModal: modalCard.isOpened
+            isModal: modalCard.isOpened || ck._navDrawerLastView
         });
     }).bind('actionView:jump', function(actionCard, href, target){
         actionCard.event.once('close', function(){
@@ -367,6 +396,7 @@ define([
         init: function(opt){
             var doc = $(document);
             var root = this.root = opt.root;
+            this.mainview = $('.ck-main', root);
             this.wrapper = $('.ck-wrapper', root);
             this.header = $('.ck-header', root);
             if (!supports.BROWSER_CONTROL) {
@@ -391,7 +421,8 @@ define([
                     'background': '#0f0'
                 });
             }
-            this.cardMask = $(TPL_CARD_MASK).appendTo(body);
+            this.cardMask = $(TPL_CARD_MASK).appendTo(this.mainview);
+            this.navDrawer = $(TPL_NAVDRAWER).prependTo(root);
             this.headerHeight = this.header.height();
             this.sizeInited = false;
             this.viewportGarbage = {};
@@ -451,6 +482,11 @@ define([
                         ck.viewport[0].innerHTML = ck.viewport[0].innerHTML;
                     }
                 }
+            });
+
+            this.cardMask.bind('touchstart', function(e){
+                e.preventDefault();
+                ck.closeNavDrawer();
             });
 
             this.loadingCard.bind('touchstart', function(e){
@@ -660,8 +696,7 @@ define([
                     ck._sessionLocked = false;
                     rewrite_state = state === MODAL_CARDID && DEFAULT_CARDID 
                         || state;
-                    var card = $('#' + rewrite_state) || [];
-                    if (!card[0]) {
+                    if (!$('#' + rewrite_state).hasClass('ck-card')) {
                         window.location.reload(true);
                         return;
                     }
@@ -738,7 +773,7 @@ define([
                 card_states = card_states.map(function(next_id){
                     if (next_id === MODAL_CARDID
                             || next_id === 'i'
-                            || (next_id && $('#' + next_id) || [])[0]) {
+                            || next_id && $('#' + next_id).hasClass('ck-card')) {
                         valid_states.push(HASH_SEP + next_id);
                         return next_id;
                     }
@@ -836,16 +871,15 @@ define([
                 card = $('#' + card);
             }
             var is_loading = card === this.loadingCard;
-            if (this.viewport) {
+            if (this.viewport && !opt.isNotPrev) {
                 card.data('prevCard', this.viewport[0].id);
             }
             this.initView(card, opt);
             this.viewport = card.show();
             this.updateSize(opt);
             if (!opt.isModal && !opt.isActions) {
-                this.updateHeader();
+                this.updateFrame();
             }
-            sessionStorage['ck_lasturl'] = location.href;
             if (!is_loading) {
                 setTimeout(function(){
                     bus.fire('readycardchange', [card]);
@@ -891,12 +925,9 @@ define([
             this.scrollGesture.watchScroll(card[0]);
         },
 
-        updateHeader: function(){
-            var top_submit = this.header.find('.ck-top-create').empty();
-            var create_btn = this.viewport.find('.ckd-top-create').html();
-            if (create_btn) {
-                top_submit.append(create_btn);
-            }
+        updateFrame: function(){
+            render.setFrame(this.viewport, this.header, 
+                this.navDrawer, this.raw);
         },
 
         renderUnit: function(node){
@@ -995,6 +1026,47 @@ define([
                 }
                 this.enableControl();
             }
+        },
+
+        openNavDrawer: function(){
+            if (ck._navDrawerLastView) {
+                return;
+            }
+            ck._navDrawerLastView = ck.viewport;
+            ck.navDrawer.show();
+            ck.changeView(ck.navDrawer.find('article'), {
+                preventRender: true,
+                isNotPrev: true,
+                isModal: true
+            });
+            $(body).addClass('nav-view');
+            //choreo().play().actor(ck.mainview[0], {
+                //'transform': 'translateX(' + (screen.availWidth - 40) + 'px)'
+            //}, 400).follow().then(function(){
+            //});
+        },
+
+        closeNavDrawer: function(){
+            if (!ck._navDrawerLastView) {
+                return;
+            }
+            ck.changeView(ck._navDrawerLastView, {
+                isNotPrev: true
+            });
+            $(body).removeClass('nav-view');
+            setTimeout(function(){
+                ck._navDrawerLastView = false;
+                ck.navDrawer.hide();
+                setTimeout(function(){
+                    bus.fire('navdrawer:close');
+                }, 50);
+            }, 400);
+            //choreo().play().actor(ck.mainview[0], {
+                //'transform': 'translateX(0px)'
+            //}, 400).follow().then(function(){
+
+            //});
+            return bus.promise('navdrawer:close');
         },
 
         openModal: function(opt){
@@ -1116,8 +1188,9 @@ define([
                 return '';
             });
         if (next_id && next === current) {
-            next = next_id && $('#' + next_id) || [];
-            if (!next[0]) {
+            if (!next_id 
+                    || !$('#' + next_id).hasClass('ck-card')
+                    || next_id === ck.viewport[0].id) {
                 next_id = DEFAULT_CARDID;
                 if (current_id.split(HASH_SEP).pop() === next_id) {
                     return false;
@@ -1142,6 +1215,13 @@ define([
             open_url(me.href, {
                 target: '_blank'
             });
+            return;
+        } else if ($(me).hasClass('ck-link-direct')) {
+            if (next_id) {
+                forward_handler(next_id, null, true);
+            } else {
+                open_url(me.href);
+            }
             return;
         } else if ($(me).hasClass('ck-link')) {
         } else if (/(^|\s)ck-\w+/.test(me.className)) {
@@ -1169,11 +1249,19 @@ define([
             });
             return;
         }
+        if (ck._navDrawerLastView) {
+            ck.closeNavDrawer().then(function(){
+                forward_handler(next_id, true_link);
+            });
+            return;
+        }
         ck._sessionLocked = true;
         var next = next_id && $('#' + next_id);
-        if (!next) {
+        if (!next.hasClass('ck-card')
+                || next_id === ck.viewport[0].id) {
             ck.enableControl();
             ck._sessionLocked = false;
+            return;
         }
         ck.hideTopbar();
         var current = ck.viewport;
@@ -1203,7 +1291,7 @@ define([
         }, 450, 'ease');
         moving.follow().then(function(){
             current.hide();
-            ck.cardMask.removeClass('moving');
+            ck.cardMask.removeClass('moving').css('opacity', 0);
             next.removeClass('moving');
             if (true_link) {
                 ck._unexpectStateWhenGoback = false;
@@ -1220,6 +1308,12 @@ define([
     function back_handler(prev_id){
         ck._sessionLocked = true;
         ck.disableControl();
+        if (ck._navDrawerLastView) {
+            ck.closeNavDrawer().then(function(){
+                back_handler(prev_id);
+            });
+            return;
+        }
         if (actionView.current) {
             actionView.current.close().event.once('close', function(){
                 back_handler(prev_id);
@@ -1306,6 +1400,12 @@ define([
             ck.disableControl();
             if (modalCard.isOpened) {
                 ck.closeModal().done(function(){
+                    open_url(true_link, opt);
+                });
+                return;
+            }
+            if (ck._navDrawerLastView) {
+                ck.closeNavDrawer().then(function(){
                     open_url(true_link, opt);
                 });
                 return;
