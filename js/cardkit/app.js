@@ -10,10 +10,11 @@ define([
     'momo/base',
     'momo/tap',
     'momo/swipe',
-    'momo/drag',
     'momo/scroll',
+    //'momo/drag',
     './view/control',
     './view/picker',
+    './view/ranger',
     './view/stars',
     './view/modalcard',
     './view/actionview',
@@ -26,8 +27,9 @@ define([
     'cardkit/env',
     'mo/domready'
 ], function($, _, browsers, cookie, tpl, easing, soviet, choreo, 
-    momoBase, momoTap, momoSwipe, momoDrag, momoScroll, 
-    control, picker, stars, modalCard, actionView, growl, 
+    momoBase, momoTap, momoSwipe, momoScroll, 
+    //momoDrag,
+    control, picker, ranger, stars, modalCard, actionView, growl, 
     tpl_overflowmenu, tpl_ctlbar, 
     bus, render, supports, env){
 
@@ -63,7 +65,9 @@ define([
             return this;
         },
         trigger: function(e, ev){
-            $(e.target).trigger(ev);
+            delete e.layerX;
+            delete e.layerY;
+            $(e.target).trigger(ev, e);
             return this;
         }
     });
@@ -77,6 +81,23 @@ define([
             //clear_active_item_mask(ck.viewport);
         //},
         
+        '.ck-link-img': function(){
+            var src = $(this).attr('src');
+            if (src) {
+                ck.openImage(src);
+            }
+        },
+
+        '.ck-confirm-link': function(){
+            var me = $(this);
+            if (!this.href) {
+                me = me.parent();
+            }
+            ck.confirm('', function(){
+                open_url(me.attr('href'), me);
+            }, me.data());
+        },
+
         '.ck-post-link': handle_control,
 
         '.ck-post-button, .ck-post-button span': tap_ck_post,
@@ -169,19 +190,21 @@ define([
         },
 
         '.ck-top-overflow': function(){
-            var options = $('.ck-top-overflow-items .ck-item').map(function(item, i){
-                return $(tpl.convertTpl(this, {
-                    i: i,
-                    text: $(item).html()
-                }, 'item'))[0];
-            }, tpl_overflowmenu.template);
+            var selector = '.ck-top-overflow-items .ck-item,'
+                    + '.ck-top-overflow-items .ck-overflow-item',
+                options = $(selector).map(function(item, i){
+                    return $(tpl.convertTpl(this, {
+                        i: i,
+                        text: $(item).html()
+                    }, 'item'))[0];
+                }, tpl_overflowmenu.template);
             actionView(this, {
                 options: options
             }).open();
             bus.bind('actionView:confirmOnThis', function(actionCard){
                 var i = actionCard.val();
                 bus.once('actionView:close', function(){
-                    $('.ck-top-overflow-items .ck-item').eq(i).trigger('tap');
+                    $(selector).eq(i).trigger('tap');
                 });
             });
         },
@@ -453,6 +476,8 @@ define([
                 distanceThreshold: 10 
             });
             set_alias_events(swipeGesture.event);
+            //var dragGesture = momoDrag(this.mainview);
+            //set_alias_events(dragGesture.event);
 
             if (!supports.CARD_SCROLL) {
                 $(body).addClass('no-cardscroll');
@@ -508,7 +533,23 @@ define([
                 //'.ck-link-mask': function(){
                     //clear_active_item_mask(ck.viewport);
                 //}
+            }).on('change', {
+                '.ck-ranger': function(e){
+                    ranger(this).val(e.target.value);
+                }
             }).on('touchend', {
+                '.ck-ranger': function(){
+                    var r = ranger(this);
+                    r.notify.close();
+                    var url = $(this).trigger('ranger:changed', {
+                        component: r
+                    }).data('url');
+                    if (url) {
+                        open_url(tpl.format(url, {
+                            value: r.val()
+                        }));
+                    }
+                },
                 '.ck-stars': function(e) {
                     respond_stars.call(this, e, 'val');
                 },
@@ -553,6 +594,8 @@ define([
                     stick_item.call(this, false);
                 }
             });
+
+            //init_card_drag();
 
             if (!supports.SAFARI_OVERFLOWSCROLL) {
 
@@ -1069,6 +1112,10 @@ define([
             return bus.promise('navdrawer:close');
         },
 
+        openImage: function(src){
+            forward_handler(LOADING_CARDID, src);
+        },
+
         openModal: function(opt){
             this.hideAddressbar();
             this.disableControl();
@@ -1099,7 +1146,8 @@ define([
                 confirmText: '确认',
                 cancelText: '取消',
                 multiselect: true
-            }, opt)).open().event.once('confirm', cb);
+            }, opt)).open();
+            bus.bind('actionView:confirmOnThis', cb);
         },
 
         notify: function(content, opt) {
@@ -1121,6 +1169,7 @@ define([
 
         control: control,
         picker: picker,
+        ranger: ranger,
         modalCard: modalCard,
         actionView: actionView, 
         growl: growl
@@ -1223,7 +1272,8 @@ define([
                 open_url(me.href);
             }
             return;
-        } else if ($(me).hasClass('ck-link')) {
+        } else if ($(me).hasClass('ck-link')
+                || $(me).hasClass('ck-link-img')) {
         } else if (/(^|\s)ck-\w+/.test(me.className)) {
             return;
         } else if (me.target) {
@@ -1325,7 +1375,9 @@ define([
         var current = ck.viewport;
         choreo.transform(current[0], 'translateX', '0px');
         current.addClass('moving');
-        ck.changeView(prev);
+        ck.changeView(prev, {
+            isNotPrev: true
+        });
         ck.cardMask.css('opacity', '0.8').addClass('moving');
         var moving = choreo('card:moving').clear().play();
         moving.actor(ck.cardMask[0], {
@@ -1338,25 +1390,29 @@ define([
             ck.cardMask.removeClass('moving');
             current.hide().removeClass('moving');
             choreo.transform(current[0], 'translateX', '0px');
-            if (prev_id === LOADING_CARDID) {
-                //alert('back: ' + document.referrer + '\n' + location.href)
-                if (compare_link(document.referrer)
-                       || !/#.+/.test(document.referrer)) { // redirect.html
-                    ck._backFromSameUrl = true;
-                }
-                history.back();
-                var loc = location.href;
-                setTimeout(function(){
-                    if (location.href === loc) {
-                        location.reload();
-                    }
-                }, 700);
-            } else {
-                ck.enableControl();
-                ck._sessionLocked = false;
-                ck.showTopbar();
-            }
+            when_back_end(prev_id);
         });
+    }
+
+    function when_back_end(prev_id){
+        if (prev_id === LOADING_CARDID) {
+            //alert('back: ' + document.referrer + '\n' + location.href)
+            if (compare_link(document.referrer)
+                   || !/#.+/.test(document.referrer)) { // redirect.html
+                ck._backFromSameUrl = true;
+            }
+            history.back();
+            var loc = location.href;
+            setTimeout(function(){
+                if (location.href === loc) {
+                    location.reload();
+                }
+            }, 700);
+        } else {
+            ck.enableControl();
+            ck._sessionLocked = false;
+            ck.showTopbar();
+        }
     }
 
     function push_history(next_id){
@@ -1448,6 +1504,61 @@ define([
             $.Event.aliases[ev] = soviet_aliases[ev] = 'ck_' + events[ev];
         }
     }
+
+    //function init_card_drag(){
+        //var _startX, _current, _prev, _clone, _hideTimer;
+        //ck.mainview.on('dragstart', function(e){
+            //_startX = e.clientX;
+            //_current = ck.viewport.addClass('moving');
+            //_clone = _current.clone().show().prependTo(ck.wrapper);
+            //_prev = $('#' + (_current.data('prevCard') || LOADING_CARDID));
+            //ck.hideTopbar();
+            //ck.changeView(_prev, {
+                //isNotPrev: true
+            //});
+            //ck.cardMask.css('opacity', '0.8').addClass('moving');
+            //_hideTimer = setTimeout(function(){
+                //_current.addClass('hidding');
+            //}, 200);
+        //}).on('drag', function(e){
+            //var d = e.clientX - _startX;
+            //if (d < 0) {
+                //d = 0;
+            //}
+            //choreo.transform(_clone[0], 'translateX', d + 'px');
+            //ck.cardMask.css('opacity', (1 - d / window.innerWidth) * 0.8);
+        //}).on('dragend', function(e){
+            //clearTimeout(_hideTimer);
+            //var d = e.clientX - _startX;
+            //if (d < 0) {
+                //d = 0;
+            //}
+            //var s = d / window.innerWidth;
+            //if (s > 0.3) {
+                //choreo().play().actor(_clone[0], {
+                    //'transform': 'translateX(' + window.innerWidth + 'px)'
+                //}, 100).follow().then(function(){
+                    //ck._preventNextHashEv = true;
+                    //history.back();
+                    //ck.cardMask.removeClass('moving').css('opacity', 0);
+                    //_clone.hide().removeClass('moving');
+                    //_current.remove();
+                    //when_back_end(_prev[0].id);
+                //});
+            //} else {
+                //choreo().play().actor(_clone[0], {
+                    //'transform': 'translateX(0px)'
+                //}, 100).follow().then(function(){
+                    //ck.changeView(_clone);
+                    //ck.cardMask.removeClass('moving').css('opacity', 0);
+                    //_prev.hide();
+                    //_clone.removeClass('moving');
+                    //_current.remove();
+                    //ck.showTopbar();
+                //});
+            //}
+        //});
+    //}
 
     //function check_gc(controller){
         //return ck.viewportGarbage[controller.parentId];

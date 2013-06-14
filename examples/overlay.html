@@ -66,7 +66,7 @@
 </div>
 
 <div class="ckcfg-page-actions">
-    <button type="button" class="ckd-item switchstyle">切换界面风格</button>
+    <button type="button" class="ckd-overflow-item switchstyle">切换界面风格</button>
 </div>
 
 </header>
@@ -109,7 +109,7 @@
         </div>
 
         <div class="ckcfg-card-actions">
-            <div class="ckd-item" data-source="ckdActionbarItem1"></div>
+            <div class="ckd-overflow-item" data-source="ckdActionbarItem1"></div>
             <button type="button" class="ckd-item ck-modal-button" 
                 data-title="动作3"
                 data-url="formcontent.html">动作3</button>
@@ -247,7 +247,7 @@
 <button type="button" class="ck-actions-button actions3 demo"
         data-fluid="true">
     <span>Jump list</span>
-    <a href="picker.html" class="ck-option" target="_self">picker.html</a>
+    <a href="picker.html" class="ck-option ck-link-direct">picker.html</a>
     <a href="control.html" class="ck-option" target="_self">control.html</a>
     <a href="index.html" class="ck-option" target="_self">index.html</a>
     <a href="tel:114" class="ck-option" target="_top">tel:114</a>
@@ -300,6 +300,22 @@
                     <div class="democode content" jssource="jsDemoMyConfirm"></div>
                 </div>
             </div>
+            <div class="ckd-item">
+<!--demo-->
+<a class="ck-confirm-link demo" 
+        href="index.html" 
+        target="_blank"
+        data-title="确认要跳转吗？">
+Confirm link
+</a>
+<!--demo end-->
+                <div class="ck-folder"
+                        data-enable-label="Hide the HTML" 
+                        data-label="header">
+                    <header>Show the HTML</header>
+                    <div class="democode content"></div>
+                </div>
+            </div>
         </div>
 
         <div class="ck-box-unit" data-cfg-plain="true">
@@ -341,7 +357,7 @@
     <div class="ck-card" id="consoleCard">
 
         <div class="ckcfg-card-actions">
-            <div class="ckd-item" data-source="ckdActionbarItem1"></div>
+            <div class="ckd-overflow-item" data-source="ckdActionbarItem1"></div>
         </div>
 
         <div class="ck-box-unit" data-cfg-paper="true">
@@ -380,9 +396,17 @@
     </div>
 
     <div class="ck-card" id="optionsCard">
+
+        <div class="ckcfg-card-actions" data-source="ckdActionbar">
+        </div>
+
     </div>
 
     <div class="ck-card" id="apiCard">
+
+        <div class="ckcfg-card-actions" data-source="ckdNothing">
+        </div>
+
     </div>
 
     <div class="ck-card ck-loading" id="ckLoading">
@@ -401,7 +425,7 @@
 <div class="ck-raw">
 
     <div class="ckdActionbar">
-        <button type="button" class="ckd-item ck-modal-button ckdActionbarItem1" data-url="formcontent.html" data-title="动作1">动作1</button>
+        <button type="button" class="ckd-overflow-item ck-modal-button ckdActionbarItem1" data-url="formcontent.html" data-title="动作1">动作1</button>
         <button type="button" class="ckd-item ck-modal-button" data-url="formcontent.html" data-title="动作2">动作2</button>
     </div>
 

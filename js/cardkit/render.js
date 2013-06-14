@@ -29,6 +29,7 @@ define([
             'page-actions': actionbarParser,
             'card-actions': actionbarParser
         },
+        slice = Array.prototype.slice,
 
         SCRIPT_TAG = 'script[type="text/cardscript"]',
 
@@ -197,6 +198,7 @@ define([
             var cfg = this._frameConfig,
                 customized = this._frameCustomized,
                 global_cfg,
+                local_cfg,
                 cfg_node,
                 changed = {};
             for (var part in frame_parts) {
@@ -204,21 +206,33 @@ define([
                     global_cfg = header.find('.ckcfg-' + part);
                     if (global_cfg[0]) {
                         cfg[part] = frame_parts[part](global_cfg, raw);
-                        changed[part] = true;
+                        if (cfg[part]) {
+                            changed[part] = true;
+                        }
                     }
                 }
                 cfg_node = card.find('.ckcfg-' + part);
                 customized[part] = !!cfg_node[0];
                 if (customized[part]) {
-                    cfg[part] = frame_parts[part](cfg_node, raw);
-                    changed[part] = true;
+                    local_cfg = frame_parts[part](cfg_node, raw);
+                    if (local_cfg) {
+                        cfg[part] = local_cfg;
+                        changed[part] = true;
+                    } else {
+                        customized[part] = false;
+                    }
                 }
             }
-            if (changed['page-actions'] || changed['card-actions']) {
+            if (changed['card-actions']) {
                 var actions = cfg['actionbar'] = cfg['card-actions'],
-                    action_items = actions.items;
-                action_items.push.apply(action_items, cfg['page-actions'].items);
-                actions.overflowItems = action_items.splice(actions.config.limit);
+                    action_items = actions.items,
+                    action_overflow_items = actions.overflowItems;
+                action_items.push.apply(action_items, 
+                    slice.call(cfg['page-actions'].items));
+                action_overflow_items.push.apply(action_overflow_items, 
+                    slice.call(cfg['page-actions'].overflowItems));
+                action_overflow_items.unshift.apply(actions.overflowItems,
+                    slice.call(action_items.splice(actions.config.limit)));
                 $('.ck-top-actions').html(tpl.convertTpl(tpl_actionbar.template, cfg));
             }
             if (changed['navdrawer']) {

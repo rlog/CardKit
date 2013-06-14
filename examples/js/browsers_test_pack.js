@@ -734,7 +734,7 @@ define("mo/template/string", [], function(require, exports){
  */
 define("mo/browsers", [], function(){
 
-    var match, skin, os,
+    var match, skin, os, is_mobile,
         ua = this.navigator.userAgent.toLowerCase(),
         rank = { 
             "360ee": 2,
@@ -786,8 +786,10 @@ define("mo/browsers", [], function(){
             || ua.indexOf("compatible") < 0 && rmozilla.exec(ua) 
             || [];
 
+        is_mobile = rmobilesafari.exec(ua);
+
         if (match[1] === 'webkit') {
-            var vendor = rmobilesafari.exec(ua) || rsafari.exec(ua);
+            var vendor = is_mobile || rsafari.exec(ua);
             if (vendor) {
                 match[3] = match[1];
                 match[4] = match[2];
@@ -829,6 +831,8 @@ define("mo/browsers", [], function(){
         engineversion: match[4] || "0",
         os: os[1],
         osversion: os[2] || "0",
+        isMobile: os[1] === 'iphone'
+            || os[1] === 'android' && !!is_mobile,
         skin: skin[1] || "",
         ua: ua
     };
@@ -4991,6 +4995,71 @@ define('momo/drag', [
 
     var MomoDrag = _.construct(momoBase.Class);
 
+    _.mix(MomoDrag.prototype, {
+
+        EVENTS: [
+            'drag',
+            'dragover',
+            'dragstart',
+            'dragend'
+        ],
+        DEFAULT_CONFIG: {
+            'dragThreshold': 200
+        },
+
+        checkDrag: function(){
+            if (this._holding) {
+                this._holding = false;
+                clearTimeout(this._startTimer);
+            }
+        },
+
+        press: function(e){
+            var self = this,
+                t = self.SUPPORT_TOUCH ? e.touches[0] : e,
+                src = t.target;
+            //if (src.getAttribute('draggable') !== 'true') {
+                //return;
+            //}
+            self._srcTarget = false;
+            self._holding = true;
+            self._startTimer = setTimeout(function(){
+                self._holding = false;
+                self._srcTarget = src;
+                self.trigger(_.copy(t), self.event.dragstart);
+            }, self._config.dragThreshold);
+        },
+
+        move: function(e){
+            this.checkDrag();
+            if (!this._srcTarget) {
+                return;
+            }
+            var t = this.SUPPORT_TOUCH ? e.touches[0] : e;
+            this.trigger(_.merge({ 
+                target: this._srcTarget 
+            }, t), this.event.drag);
+            this.trigger(_.copy(t), this.event.dragover);
+        },
+
+        release: drag_end,
+
+        cancel: drag_end
+
+    });
+
+    function drag_end(e){
+        this.checkDrag();
+        if (!this._srcTarget) {
+            return;
+        }
+        var t = this.SUPPORT_TOUCH ? e.changedTouches[0] : e;
+        this.trigger(_.merge({ 
+            target: this._srcTarget 
+        }, t), this.event.dragend);
+        this._srcTarget = false;
+    }
+
     function exports(elm, opt, cb){
         return new exports.Class(elm, opt, cb);
     }
@@ -5233,7 +5302,7 @@ define('momo', [
             return this;
         },
         trigger: function(e, ev){
-            $(e.target).trigger(ev);
+            $(e.target).trigger(ev, e);
             return this;
         }
     });
