@@ -3726,6 +3726,7 @@ define('moui/overlay', [
             title: '',
             content: '',
             className: 'moui-overlay',
+            parent: body,
             openDelay: 50,
             closeDelay: 0,
             event: {}
@@ -3788,6 +3789,10 @@ define('moui/overlay', [
             return this;
         },
 
+        insertNode: function(parent){
+            this._node.appendTo(parent || this._config.parent);
+        },
+
         showLoading: function(text) {
             this._node.addClass('loading');
             this._title.html((text || LOADING_DEFAULT) + LOADING_DOTS);
@@ -3831,7 +3836,8 @@ define('moui/overlay', [
         },
 
         prepareOpen: function(){
-            this._node.appendTo(body).addClass('rendered');
+            this.insertNode();
+            this._node.addClass('rendered');
             this.event.fire('prepareOpen', [this]);
         },
 
@@ -5456,6 +5462,18 @@ define('moui/ranger', [
                 }
             }
             return this.val();
+        },
+
+        changeStart: function(){
+            this._originValue = this._value;
+            this.event.fire('changeStart', [this]);
+        },
+
+        changeEnd: function(){
+            this.event.fire('changeEnd', [this]);
+            if (this._originValue != this._value) {
+                this.event.fire('changed', [this]);
+            }
         }
 
     };
@@ -5475,12 +5493,12 @@ define('moui/ranger', [
 define("../cardkit/view/ranger", [
   "dollar",
   "moui/ranger",
+  "../cardkit/bus",
   "../cardkit/view/growl"
-], function($, ranger, growl){
+], function($, ranger, bus, growl){
 
     var UID = '_ckRangerUid',
     
-        notify,
         uid = 0,
         lib = {};
 
@@ -5493,14 +5511,21 @@ define("../cardkit/view/ranger", [
         id = elm[0][UID] = ++uid;
         opt = opt || {};
         var p = lib[id] = ranger(elm, opt);
-        if (!notify) {
-            notify = growl({});
-        }
-        p.notify = notify;
+        p.notify = growl({
+            parent: elm.parent(),
+            corner: 'stick'
+        });
         p.event.bind('change', function(v){
             p.notify.set({
                 content: v
             }).open();
+        }).bind('changed', function(){
+            var url = elm.trigger('ranger:changed', {
+                component: p
+            }).data('url');
+            bus.fire('ranger:changed', [p, url]);
+        }).bind('changeEnd', function(){
+            p.notify.close();
         });
 
         return p;
@@ -7820,6 +7845,14 @@ define("../cardkit/app", [
         });
     });
 
+    bus.bind('ranger:changed', function(ranger, url){
+        if (url) {
+            open_url(tpl.format(url, {
+                value: ranger.val()
+            }));
+        }
+    });
+
     var ck = {
 
         init: function(opt){
@@ -7942,19 +7975,18 @@ define("../cardkit/app", [
             }).on('change', {
                 '.ck-ranger': function(e){
                     ranger(this).val(e.target.value);
+                    return true;
+                }
+            }).on('touchstart', {
+                '.ck-ranger': function(e){
+                    ranger(this).val(e.target.value);
+                    ranger(this).changeStart();
+                    return true;
                 }
             }).on('touchend', {
                 '.ck-ranger': function(){
-                    var r = ranger(this);
-                    r.notify.close();
-                    var url = $(this).trigger('ranger:changed', {
-                        component: r
-                    }).data('url');
-                    if (url) {
-                        open_url(tpl.format(url, {
-                            value: r.val()
-                        }));
-                    }
+                    ranger(this).changeEnd();
+                    return true;
                 },
                 '.ck-stars': function(e) {
                     respond_stars.call(this, e, 'val');

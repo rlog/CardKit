@@ -1,12 +1,12 @@
 define([
     'dollar',
     'moui/ranger',
+    '../bus',
     './growl'
-], function($, ranger, growl){
+], function($, ranger, bus, growl){
 
     var UID = '_ckRangerUid',
     
-        notify,
         uid = 0,
         lib = {};
 
@@ -19,14 +19,21 @@ define([
         id = elm[0][UID] = ++uid;
         opt = opt || {};
         var p = lib[id] = ranger(elm, opt);
-        if (!notify) {
-            notify = growl({});
-        }
-        p.notify = notify;
+        p.notify = growl({
+            parent: elm.parent(),
+            corner: 'stick'
+        });
         p.event.bind('change', function(v){
             p.notify.set({
                 content: v
             }).open();
+        }).bind('changed', function(){
+            var url = elm.trigger('ranger:changed', {
+                component: p
+            }).data('url');
+            bus.fire('ranger:changed', [p, url]);
+        }).bind('changeEnd', function(){
+            p.notify.close();
         });
 
         return p;

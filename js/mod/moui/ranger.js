@@ -1,4 +1,13 @@
-
+/**
+ * Moui
+ * OO-based UI behavior modules behind CardKit(mobile webapp framework)'s view components
+ * 
+ * using AMD (Asynchronous Module Definition) API with OzJS
+ * see http://ozjs.org for details
+ *
+ * Copyright (C) 2010-2013, Dexter.Yy, MIT License
+ * vim: et:ts=4:sw=4:sts=4
+ */
 define('moui/ranger', [
     'mo/lang',
     'dollar',
@@ -69,6 +78,18 @@ define('moui/ranger', [
                 }
             }
             return this.val();
+        },
+
+        changeStart: function(){
+            this._originValue = this._value;
+            this.event.fire('changeStart', [this]);
+        },
+
+        changeEnd: function(){
+            this.event.fire('changeEnd', [this]);
+            if (this._originValue != this._value) {
+                this.event.fire('changed', [this]);
+            }
         }
 
     };

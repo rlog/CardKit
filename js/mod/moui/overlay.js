@@ -1,3 +1,13 @@
+/**
+ * Moui
+ * OO-based UI behavior modules behind CardKit(mobile webapp framework)'s view components
+ * 
+ * using AMD (Asynchronous Module Definition) API with OzJS
+ * see http://ozjs.org for details
+ *
+ * Copyright (C) 2010-2013, Dexter.Yy, MIT License
+ * vim: et:ts=4:sw=4:sts=4
+ */
 define('moui/overlay', [
     'mo/lang',
     'dollar',
@@ -22,6 +32,7 @@ define('moui/overlay', [
             title: '',
             content: '',
             className: 'moui-overlay',
+            parent: body,
             openDelay: 50,
             closeDelay: 0,
             event: {}
@@ -84,6 +95,10 @@ define('moui/overlay', [
             return this;
         },
 
+        insertNode: function(parent){
+            this._node.appendTo(parent || this._config.parent);
+        },
+
         showLoading: function(text) {
             this._node.addClass('loading');
             this._title.html((text || LOADING_DEFAULT) + LOADING_DOTS);
@@ -127,7 +142,8 @@ define('moui/overlay', [
         },
 
         prepareOpen: function(){
-            this._node.appendTo(body).addClass('rendered');
+            this.insertNode();
+            this._node.addClass('rendered');
             this.event.fire('prepareOpen', [this]);
         },
 
