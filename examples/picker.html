@@ -86,8 +86,8 @@
 
         <div class="ck-list-unit" data-style="menu">
             <header class="ckd-hd">Source code</header>
-            <a href="http://code.dapps.douban.com/cardkit/blob/master/js/mod/moui/picker.js" class="ckd-item ckd-link-extern">moui/picker</a>
-            <a href="http://code.dapps.douban.com/cardkit/blob/master/js/cardkit/view/picker.js" class="ckd-item ckd-link-extern">cardkit/view/picker</a>
+            <a href="https://github.com/douban-f2e/CardKit/tree/master/js/mod/moui/picker.js" class="ckd-item ckd-link-extern">moui/picker</a>
+            <a href="https://github.com/douban-f2e/CardKit/tree/master/js/cardkit/view/picker.js" class="ckd-item ckd-link-extern">cardkit/view/picker</a>
         </div>
 
         <div class="ck-list-unit" data-style="more" data-cfg-paper="true">
@@ -112,10 +112,13 @@
 <div class="ck-segment picker1 demo"
         data-ignore-repeat="true">
     <button type="button" class="ck-option" value="1"
+        data-enable-method="get"
         data-enable-url="data/enable.txt">Option 1</button>
     <button type="button" class="ck-option enabled" value="2"
+        data-enable-method="get"
         data-enable-url="data/enable.txt">Option 2</button>
     <button type="button" class="ck-option" value="3"
+        data-enable-method="get"
         data-enable-url="data/enable.txt">Option 3</button>
 </div>
 <!--demo end-->
@@ -132,11 +135,13 @@
         data-label="false">
     <button type="button" class="ck-option" 
             data-num-field=".op-num span"
+            data-enable-method="get"
             data-enable-url="data/enable.txt">Up
         <span class="op-num">(<span>100</span>)</span>
     </button>
     <button type="button" class="ck-option"
             data-num-field=".op-num span"
+            data-enable-method="get"
             data-enable-url="data/disable.txt">Down
         <span class="op-num">(<span>6</span>)</span>
     </button>
