@@ -94,7 +94,7 @@ define([
                 me = me.parent();
             }
             ck.confirm('', function(){
-                open_url(me.attr('href'), me);
+                open_url(me.attr('href'), me[0]);
             }, me.data());
         },
 
@@ -207,6 +207,14 @@ define([
                     $(selector).eq(i).trigger('tap');
                 });
             });
+        },
+
+        '.ck-top-title': function(){
+            if (supports.FULLSCREEN_MODE) {
+                $('.ck-top-nav').trigger('tap');
+            } else {
+                return true;
+            }
         },
 
         '.ck-top-nav, .ck-top-nav span': function(){
@@ -432,7 +440,7 @@ define([
             this.header = $('.ck-header', root);
             if (!supports.BROWSER_CONTROL) {
                 this.ctlbar = $(tpl_ctlbar.template).appendTo(this.wrapper);
-                $(body).addClass('has_ctlbar');
+                $(body).addClass('has-ctlbar');
             }
             this.footer = $('.ck-footer', root);
             this.raw = $('.ck-raw', root);
@@ -493,14 +501,14 @@ define([
             if (!supports.SAFARI_OVERFLOWSCROLL) {
                 $(body).addClass('no-overflowscroll');
             }
-            if (supports.HIDE_TOPBAR) {
+            if (supports.FOLDABLE_URLBAR) {
                 $(body).addClass('mobilesafari-bar');
             }
             if (supports.FIXED_BOTTOM_BUGGY) {
                 $(body).addClass('fixed-bottom-buggy');
             }
-            if (env.hideToolbars) {
-                $(body).addClass('hide-toolbars');
+            if (supports.FULLSCREEN_MODE) {
+                $(body).addClass('fullscreen-mode');
             }
 
             this.initState();
@@ -646,7 +654,8 @@ define([
 
             }
 
-            if (supports.CARD_SCROLL) {
+            if (supports.CARD_SCROLL
+                    && !supports.FULLSCREEN_MODE) {
 
                 var startY,
                     topbar_holded,
@@ -668,7 +677,7 @@ define([
                     .bind('touchstart', scroll_on_header);
                 this.header.bind('touchstart', scroll_on_header);
 
-                if (supports.HIDE_TOPBAR) {
+                if (supports.FOLDABLE_URLBAR) {
 
                     this.header.bind('touchmove', function(e){
                         if (topbar_holded && e.touches[0].clientY < startY) {
@@ -684,14 +693,24 @@ define([
 
             }
 
+            if (supports.FULLSCREEN_MODE) {
+                $(document).on('scrollstart', function(){
+                    ck.hideAllBars();
+                }).on('scrollend', function(){
+                    ck.showAllBars();
+                });
+            }
+
         },
 
         showView: function(){
             $(body).addClass('ck-inited');
             ck.hideAddressbar();
-            ck.hideLoadingCard();
-            ck.enableControl();
-            bus.resolve('inited');
+            bus.once('firstRender', function(){
+                ck.hideLoadingCard();
+                ck.enableControl();
+                bus.resolve('inited');
+            });
         },
 
         initWindow: function(){
@@ -747,7 +766,7 @@ define([
                     rewrite_state = state === MODAL_CARDID && DEFAULT_CARDID 
                         || state;
                     if (!$('#' + rewrite_state).hasClass('ck-card')) {
-                        window.location.reload(true);
+                        //window.location.reload(true);
                         return;
                     }
                     history.back();
@@ -757,7 +776,11 @@ define([
                 }
             });
 
-            $(window).bind("popstate", function(){
+            bus.once('inited', function(){
+                $(window).bind("popstate", when_pop);
+            });
+
+            function when_pop(){
                 if (ck._backFromSameUrl) {
                     var state = window.location.hash.split(HASH_SEP).pop();
                     //alert('10.2: ' + state)
@@ -775,15 +798,16 @@ define([
                         //alert(10 +': ' + location.href + ', ' + ck._backFromSameUrl)
                         ck._sessionLocked = false;
                         ck._backFromOtherpage = true;
-                        if (supports.GOBACK_WHEN_POP
-                                && !ck._unexpectStateWhenGoback) {
-                            history.back();
-                        } else {
-                            window.location.reload(true);
+                        if (!ck._unexpectStateWhenGoback) {
+                            if (supports.GOBACK_WHEN_POP) {
+                                history.back();
+                            } else {
+                                window.location.reload(true);
+                            }
                         }
                     }
                 }, 100);
-            });
+            }
 
         },
 
@@ -992,6 +1016,14 @@ define([
             ck.showTopbar();
         },
 
+        hideAllBars: function(){
+            $(body).addClass('allbars-disabled');
+        },
+
+        showAllBars: function(){
+            $(body).removeClass('allbars-disabled');
+        },
+
         hideTopbar: function(){
             if (this.topbarEnable && !this.disableView) {
                 this.topbarEnable = false;
@@ -1009,7 +1041,7 @@ define([
         hideAddressbar: function(){
             if (this.windowFullHeight > window.innerHeight) {
                 this.loadingCard.find('div')[0].style.visibility = 'hidden';
-                if (supports.HIDE_TOPBAR
+                if (supports.FOLDABLE_URLBAR
                         && (supports.CARD_SCROLL || !this.sizeInited)) {
                     ck.resetWindowTop();
                     body.scrollTop = 0;
@@ -1282,6 +1314,7 @@ define([
         } else if ($(me).hasClass('ck-link')
                 || $(me).hasClass('ck-link-img')) {
         } else if (/(^|\s)ck-\w+/.test(me.className)) {
+            // eg. ck-link-native
             return;
         } else if (me.target) {
             if (next_id && me.target === '_self') {
@@ -1404,7 +1437,8 @@ define([
     function when_back_end(prev_id){
         if (prev_id === LOADING_CARDID) {
             //alert('back: ' + document.referrer + '\n' + location.href)
-            if (compare_link(document.referrer)
+            if (document.referrer
+                   && compare_link(document.referrer)
                    || !/#.+/.test(document.referrer)) { // redirect.html
                 ck._backFromSameUrl = true;
             }
