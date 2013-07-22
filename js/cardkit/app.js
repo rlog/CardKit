@@ -31,7 +31,7 @@ define([
     momoBase, momoTap, momoSwipe, momoScroll, 
     //momoDrag,
     control, picker, ranger, stars, modalCard,
-    actionView, adview, growl, 
+    actionView, adView, growl, 
     tpl_overflowmenu, tpl_ctlbar, 
     bus, render, supports, env){
 
@@ -160,7 +160,7 @@ define([
         },
 
         '.ck-adview-button': function(){
-            adview(this).open();
+            adView(this).open();
         },
 
         '.ck-actionview article > .ck-option': function(){

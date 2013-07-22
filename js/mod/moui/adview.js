@@ -15,7 +15,7 @@ define('moui/adview', [
     'moui/overlay'
 ], function($, _, tpl, overlay) {
 
-    var NS = 'mouiAdview',
+    var NS = 'mouiAdView',
         TPL_VIEW =
            '<div id="{{id}}" class="moui-adview">\
                 <header><h2></h2></header>\
@@ -26,13 +26,13 @@ define('moui/adview', [
             className: 'moui-adview'
         };
 
-    var Adview = _.construct(overlay.Overlay);
+    var AdView = _.construct(overlay.Overlay);
 
-    _.mix(Adview.prototype, {
+    _.mix(AdView.prototype, {
 
         _ns: NS,
         _template: TPL_VIEW,
-        _defaults: _.merge({}, default_config, Adview.prototype._defaults),
+        _defaults: _.merge({}, default_config, AdView.prototype._defaults),
 
         applyOpen: function(){
             this.superClass.applyOpen.apply(this, arguments);
@@ -45,10 +45,10 @@ define('moui/adview', [
     });
 
     function exports(opt){
-        return new exports.Adview(opt);
+        return new exports.AdView(opt);
     }
 
-    exports.Adview= Adview;
+    exports.AdView= AdView;
 
     return exports;
 

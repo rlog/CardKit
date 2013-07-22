@@ -4,7 +4,7 @@ define([
     'moui/adview'
 ], function(_, $, adview) {
 
-    var UID = '_ckAdviewUid',
+    var UID = '_ckAdViewUid',
         uid = 0,
         lib = {};
 
