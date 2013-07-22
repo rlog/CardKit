@@ -18,6 +18,7 @@ define([
     './view/stars',
     './view/modalcard',
     './view/actionview',
+    './view/adview',
     './view/growl',
     './tpl/layout/overflowmenu',
     './tpl/layout/ctlbar',
@@ -29,7 +30,8 @@ define([
 ], function($, _, browsers, cookie, tpl, easing, soviet, choreo, 
     momoBase, momoTap, momoSwipe, momoScroll, 
     //momoDrag,
-    control, picker, ranger, stars, modalCard, actionView, growl, 
+    control, picker, ranger, stars, modalCard,
+    actionView, adview, growl, 
     tpl_overflowmenu, tpl_ctlbar, 
     bus, render, supports, env){
 
@@ -155,6 +157,10 @@ define([
 
         '.ck-growl-button': function(){
             growl(this).open();
+        },
+
+        '.ck-adview-button': function(){
+            adview(this).open();
         },
 
         '.ck-actionview article > .ck-option': function(){
@@ -1210,7 +1216,8 @@ define([
         picker: picker,
         ranger: ranger,
         modalCard: modalCard,
-        actionView: actionView, 
+        actionView: actionView,
+        adView: adView,
         growl: growl
 
     };

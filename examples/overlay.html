@@ -86,6 +86,7 @@
             <header class="ckd-hd">Source code</header>
             <a href="https://github.com/douban-f2e/CardKit/tree/master/js/mod/moui/modalview.js" class="ckd-item ckd-link-extern">moui/modalview</a>
             <a href="https://github.com/douban-f2e/CardKit/tree/master/js/mod/moui/actionview.js" class="ckd-item ckd-link-extern">moui/actionview</a>
+            <a href="https://github.com/douban-f2e/CardKit/tree/master/js/mod/moui/adview.js" class="ckd-item ckd-link-extern">moui/adview</a>
             <a href="https://github.com/douban-f2e/CardKit/tree/master/js/mod/moui/growl.js" class="ckd-item ckd-link-extern">moui/growl</a>
             <a href="https://github.com/douban-f2e/CardKit/tree/master/js/cardkit/view/modalview.js" class="ckd-item ckd-link-extern">cardkit/view/modalview</a>
             <a href="https://github.com/douban-f2e/CardKit/tree/master/js/cardkit/view/actionview.js" class="ckd-item ckd-link-extern">cardkit/view/actionview</a>
@@ -351,6 +352,24 @@ Confirm link
             </div>
         </div>
 
+        <div class="ck-box-unit" data-cfg-plain="true">
+            <header class="ckd-hd">Adview</header>
+        </div>
+        <div class="ck-form-unit">
+            <header class="ckd-hd">Examples</header>
+            <div class="ckd-item">
+<!--demo-->
+<button type="button" class="ck-adview-button demo">Show AD</button>
+<!--demo end-->
+                <div class="ck-folder"
+                        data-enable-label="Hide the HTML" 
+                        data-label="header">
+                    <header>Show the HTML</header>
+                    <div class="democode content"></div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     <div class="ck-card" id="consoleCard">
@@ -512,6 +531,10 @@ require([
     'cardkit/app',
     'cardkit/pageready'
 ], function($, ck){
+
+    console.log(ck);
+    var ad = ck.adView();
+    ad.open();
 
     ck.confirm('This is a overlay', function(){
         ck.showLoading();
